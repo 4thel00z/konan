@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.1](https://github.com/4thel00z/konan/compare/v0.2.0...v0.2.1) (2026-06-07)
+
+
+### Performance Improvements
+
+* direct char counting for non-ASCII text + wider benchmark field with plots ([1c355a5](https://github.com/4thel00z/konan/commit/1c355a54168638be2797474d4322c49eb08b95ad))
+
 ## [0.2.0](https://github.com/4thel00z/konan/compare/v0.1.0...v0.2.0) (2026-06-07)
 
 
