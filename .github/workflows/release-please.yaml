@@ -97,3 +97,6 @@ jobs:
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
           packages-dir: dist
+          # Manual re-dispatch after a partial publish must not choke on
+          # the wheels that already made it to PyPI.
+          skip-existing: true

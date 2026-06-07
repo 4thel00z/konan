@@ -40,6 +40,9 @@ python-source = "python"
 module-name = "konan._konan"
 manifest-path = "crates/konan-py/Cargo.toml"
 features = ["pyo3/extension-module"]
+# The declared License-File lives at the workspace root, outside the
+# manifest dir — include it explicitly or PyPI rejects the sdist (PEP 639).
+include = [{ path = "LICENSE", format = "sdist" }]
 
 [dependency-groups]
 dev = [
