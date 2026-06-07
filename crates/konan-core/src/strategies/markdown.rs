@@ -128,6 +128,9 @@ impl Chunker for MarkdownChunker {
                 section.clear();
                 let title = text[block.span.0..block.span.1]
                     .trim()
+                    .lines()
+                    .next()
+                    .unwrap_or_default()
                     .trim_start_matches('#')
                     .trim()
                     .to_string();
@@ -192,5 +195,19 @@ mod tests {
         assert!(chunks[0].text.starts_with("## A"));
         assert!(chunks[1].text.starts_with("## B"));
         assert!(!chunks[1].text.contains("## A"));
+    }
+
+    #[test]
+    fn setext_heading_breadcrumb() {
+        let md = "Title\n=====\n\nBody text here.\n\nSub\n---\n\nMore body.\n";
+        let chunks = MarkdownChunker::new(200, 0).unwrap().chunk(md).unwrap();
+        // No chunk should have an underline leaked into its breadcrumb
+        assert!(!chunks.iter().any(|c| c.text.contains("=====")), "underline leaked into breadcrumb");
+        assert!(!chunks.iter().any(|c| c.text.contains("---\n")), "setext underline leaked into breadcrumb");
+        // The H1 section chunk must start with the clean breadcrumb
+        assert!(chunks[0].text.starts_with("# Title\n\n"), "got: {:?}", chunks[0].text);
+        // The H2 section chunk must contain the nested breadcrumb without any underlines
+        let sub_chunk = chunks.iter().find(|c| c.text.contains("## Sub")).expect("no Sub chunk");
+        assert!(sub_chunk.text.starts_with("# Title > ## Sub\n\n"), "got: {:?}", sub_chunk.text);
     }
 }
