@@ -38,7 +38,10 @@ impl PyChunk {
         self.inner.text.chars().count()
     }
     fn __repr__(&self) -> String {
-        let preview: String = self.inner.text.chars().take(40).collect();
+        let mut preview: String = self.inner.text.chars().take(40).collect();
+        if self.inner.text.chars().count() > 40 {
+            preview.push('…');
+        }
         format!(
             "Chunk(index={}, start={}, end={}, text={:?})",
             self.inner.index, self.inner.start, self.inner.end, preview

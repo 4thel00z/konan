@@ -98,6 +98,10 @@ embedder = OpenAIEmbedder(
     base_url="https://api.openai.com/v1",
     model="text-embedding-3-small",
     api_key="sk-...",
+    batch_size=128,    # texts per request
+    timeout=30.0,      # request timeout, seconds
+    max_retries=2,     # exponential backoff on 429/5xx/connect errors
+    dimensions=512,    # optional: shorten text-embedding-3-* vectors
 )
 chunker = SemanticChunker(embedder=embedder, threshold=0.75)
 chunks = await chunker.chunk_async(article)

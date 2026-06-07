@@ -54,3 +54,35 @@ async def test_embedding_error_on_unreachable_endpoint():
 def test_rejects_non_embedder():
     with pytest.raises(ValueError):
         SemanticChunker(embedder=42)
+
+
+async def test_dimensions_passthrough(embeddings_url):
+    embedder = OpenAIEmbedder(base_url=embeddings_url, model="test", dimensions=5)
+    vectors = await embedder.embed_async(["a cat", "physics"])
+    assert [len(v) for v in vectors] == [5, 5]
+    assert vectors[0][:2] == [1.0, 0.0]
+
+
+async def test_retry_recovers_from_transient_500(embeddings_url):
+    embedder = OpenAIEmbedder(
+        base_url=embeddings_url, model="fail-once-retry", max_retries=2
+    )
+    vectors = await embedder.embed_async(["a cat"])
+    assert vectors == [[1.0, 0.0]]
+
+
+async def test_no_retry_raises_on_500(embeddings_url):
+    embedder = OpenAIEmbedder(
+        base_url=embeddings_url, model="fail-once-noretry", max_retries=0
+    )
+    with pytest.raises(EmbeddingError):
+        await embedder.embed_async(["a cat"])
+
+
+def test_embedder_invalid_config():
+    with pytest.raises(ValueError):
+        OpenAIEmbedder(base_url="http://x", model="m", timeout=0.0)
+    with pytest.raises(ValueError):
+        OpenAIEmbedder(base_url="http://x", model="m", dimensions=0)
+    with pytest.raises(ValueError):
+        OpenAIEmbedder(base_url="http://x", model="m", batch_size=0)

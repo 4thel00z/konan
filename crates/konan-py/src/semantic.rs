@@ -8,21 +8,47 @@ use pyo3::prelude::*;
 use crate::chunk::PyChunk;
 use crate::errors::to_py_err;
 
+/// Python-style display of an `Option`: `None` or the value's repr-ish form.
+pub(crate) fn fmt_opt<T: std::fmt::Display>(opt: &Option<T>) -> String {
+    match opt {
+        Some(v) => v.to_string(),
+        None => "None".to_string(),
+    }
+}
+
 #[pyclass(name = "OpenAIEmbedder", module = "konan", frozen)]
 #[derive(Clone)]
 pub struct PyOpenAIEmbedder {
     pub(crate) inner: Arc<OpenAIEmbedder>,
+    pub(crate) repr: String,
 }
 
 #[pymethods]
 impl PyOpenAIEmbedder {
     #[new]
-    #[pyo3(signature = (base_url, model, api_key=None, batch_size=128))]
-    fn new(base_url: String, model: String, api_key: Option<String>, batch_size: usize) -> PyResult<Self> {
+    #[pyo3(signature = (base_url, model, api_key=None, batch_size=128, timeout=30.0, max_retries=2, dimensions=None))]
+    fn new(
+        base_url: String,
+        model: String,
+        api_key: Option<String>,
+        batch_size: usize,
+        timeout: f64,
+        max_retries: u32,
+        dimensions: Option<u32>,
+    ) -> PyResult<Self> {
+        let repr = format!(
+            "OpenAIEmbedder(base_url={base_url:?}, model={model:?}, api_key={}, \
+             batch_size={batch_size}, timeout={timeout:?}, max_retries={max_retries}, \
+             dimensions={})",
+            if api_key.is_some() { "\"***\"" } else { "None" },
+            fmt_opt(&dimensions),
+        );
         Ok(Self {
             inner: Arc::new(
-                OpenAIEmbedder::new(base_url, model, api_key, batch_size).map_err(to_py_err)?,
+                OpenAIEmbedder::new(base_url, model, api_key, batch_size, timeout, max_retries, dimensions)
+                    .map_err(to_py_err)?,
             ),
+            repr,
         })
     }
 
@@ -32,6 +58,10 @@ impl PyOpenAIEmbedder {
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             inner.embed(&texts).await.map_err(to_py_err)
         })
+    }
+
+    fn __repr__(&self) -> &str {
+        &self.repr
     }
 }
 
@@ -68,6 +98,7 @@ impl Embedder for PyCallableEmbedder {
 #[pyclass(name = "SemanticChunker", module = "konan", frozen)]
 pub struct PySemanticChunker {
     inner: Arc<SemanticChunker<Arc<dyn Embedder>>>,
+    repr: String,
 }
 
 #[pymethods]
@@ -81,18 +112,36 @@ impl PySemanticChunker {
         min_chunk_size: usize,
         max_chunk_size: Option<usize>,
     ) -> PyResult<Self> {
-        let port: Arc<dyn Embedder> = if let Ok(native) = embedder.extract::<PyOpenAIEmbedder>() {
-            Arc::clone(&native.inner) as Arc<dyn Embedder>
-        } else if embedder.is_callable() {
-            Arc::new(PyCallableEmbedder { callable: embedder.unbind() })
-        } else {
-            return Err(PyValueError::new_err(
-                "embedder must be an OpenAIEmbedder or an async callable",
-            ));
-        };
+        let (port, embedder_repr): (Arc<dyn Embedder>, String) =
+            if let Ok(native) = embedder.extract::<PyOpenAIEmbedder>() {
+                let repr = native.repr.clone();
+                (Arc::clone(&native.inner) as Arc<dyn Embedder>, repr)
+            } else if embedder.is_callable() {
+                (
+                    Arc::new(PyCallableEmbedder { callable: embedder.unbind() }),
+                    "<async callable>".to_string(),
+                )
+            } else {
+                return Err(PyValueError::new_err(
+                    "embedder must be an OpenAIEmbedder or an async callable",
+                ));
+            };
+        let repr = format!(
+            "SemanticChunker(embedder={embedder_repr}, threshold={}, percentile={percentile:?}, \
+             min_chunk_size={min_chunk_size}, max_chunk_size={})",
+            match threshold {
+                Some(t) => format!("{t:?}"),
+                None => "None".to_string(),
+            },
+            fmt_opt(&max_chunk_size),
+        );
         let inner = SemanticChunker::new(port, threshold, percentile, min_chunk_size, max_chunk_size)
             .map_err(to_py_err)?;
-        Ok(Self { inner: Arc::new(inner) })
+        Ok(Self { inner: Arc::new(inner), repr })
+    }
+
+    fn __repr__(&self) -> &str {
+        &self.repr
     }
 
     fn chunk(&self, py: Python<'_>, text: String) -> PyResult<Vec<PyChunk>> {

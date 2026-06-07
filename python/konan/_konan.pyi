@@ -83,6 +83,9 @@ class OpenAIEmbedder:
         model: str,
         api_key: str | None = None,
         batch_size: int = 128,
+        timeout: float = 30.0,
+        max_retries: int = 2,
+        dimensions: int | None = None,
     ) -> None: ...
     async def embed_async(self, texts: Sequence[str]) -> list[list[float]]: ...
 

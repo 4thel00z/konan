@@ -23,9 +23,11 @@ Three follow-ups to the initial konan build:
   configured timeout.
 - New constructor params (Rust, Python signature, `.pyi`):
   - `timeout: f64` seconds, default **30.0** (must be > 0)
-  - `max_retries: u32`, default **2** — own retry loop per batch with
-    exponential backoff (100ms·2ⁿ). Retries any request error except
-    invalid-argument construction errors; bounded, deterministic attempt count.
+  - `max_retries: u32`, default **2** — configures async-openai's own
+    `OpenAIRetryLayer` (the client's default executor always retries 3×; we
+    replace it via the `middleware` feature so the knob is honored). The layer
+    retries 429 (except insufficient_quota), 5xx and connection errors with
+    exponential backoff, honoring `Retry-After`.
   - `dimensions: Option<u32>`, default **None** — forwarded on the embeddings
     request when set.
 - Unchanged: `Embedder` port, batching by `batch_size`, sort-by-index,
