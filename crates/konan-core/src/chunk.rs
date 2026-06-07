@@ -18,6 +18,12 @@ impl Chunk {
     pub fn new(text: impl Into<String>, start: usize, end: usize, index: usize) -> Self {
         let text = text.into();
         let hash = format!("{:016x}", xxh3_64(text.as_bytes()));
-        Self { text, start, end, index, hash }
+        Self {
+            text,
+            start,
+            end,
+            index,
+            hash,
+        }
     }
 }

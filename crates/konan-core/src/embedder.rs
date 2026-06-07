@@ -73,8 +73,8 @@ impl OpenAIEmbedder {
         // with_http_client installs the timeout-bearing client for request
         // building; with_http_service replaces the executor (and its default
         // 3-retry layer) with one honoring our max_retries.
-        let retry_service =
-            OpenAIRetryLayer::new(max_retries as usize).layer(ReqwestService::new(http_client.clone()));
+        let retry_service = OpenAIRetryLayer::new(max_retries as usize)
+            .layer(ReqwestService::new(http_client.clone()));
         let client = Client::with_config(config)
             .with_http_client(http_client)
             .with_http_service(retry_service);

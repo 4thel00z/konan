@@ -27,9 +27,16 @@ impl RecursiveChunker {
             ));
         }
         let separators = separators.unwrap_or_else(|| {
-            ["\n\n", "\n", " ", ".", ",", ""].iter().map(|s| s.to_string()).collect()
+            ["\n\n", "\n", " ", ".", ",", ""]
+                .iter()
+                .map(|s| s.to_string())
+                .collect()
         });
-        Ok(Self { chunk_size, chunk_overlap, separators })
+        Ok(Self {
+            chunk_size,
+            chunk_overlap,
+            separators,
+        })
     }
 
     /// Split `span` into unit spans each at most `chunk_size` chars (or
@@ -108,7 +115,10 @@ mod tests {
     #[test]
     fn prefers_paragraph_breaks() {
         let text = "Para one is here.\n\nPara two is here.\n\nPara three is here.";
-        let chunks = RecursiveChunker::new(25, 0, None).unwrap().chunk(text).unwrap();
+        let chunks = RecursiveChunker::new(25, 0, None)
+            .unwrap()
+            .chunk(text)
+            .unwrap();
         assert_eq!(chunks.len(), 3);
         assert!(chunks[0].text.starts_with("Para one"));
         assert!(chunks[1].text.starts_with("Para two"));
@@ -118,7 +128,10 @@ mod tests {
     #[test]
     fn falls_back_to_words_then_chars() {
         let text = "abcdefghij klmnopqrst";
-        let chunks = RecursiveChunker::new(5, 0, None).unwrap().chunk(text).unwrap();
+        let chunks = RecursiveChunker::new(5, 0, None)
+            .unwrap()
+            .chunk(text)
+            .unwrap();
         for c in &chunks {
             assert!(c.end - c.start <= 5);
         }
@@ -128,7 +141,10 @@ mod tests {
     #[test]
     fn overlap_carries_units() {
         let text = "alpha beta gamma delta epsilon zeta eta theta iota kappa";
-        let chunks = RecursiveChunker::new(20, 8, None).unwrap().chunk(text).unwrap();
+        let chunks = RecursiveChunker::new(20, 8, None)
+            .unwrap()
+            .chunk(text)
+            .unwrap();
         assert!(chunks.len() >= 2);
         assert!(chunks[1].start < chunks[0].end);
         assert_char_offsets(text, &chunks);
@@ -138,7 +154,10 @@ mod tests {
     fn custom_separators() {
         let text = "a|b|c|d";
         let seps = Some(vec!["|".to_string(), "".to_string()]);
-        let chunks = RecursiveChunker::new(3, 0, seps).unwrap().chunk(text).unwrap();
+        let chunks = RecursiveChunker::new(3, 0, seps)
+            .unwrap()
+            .chunk(text)
+            .unwrap();
         assert!(chunks.len() >= 2);
         assert_char_offsets(text, &chunks);
     }
@@ -146,7 +165,10 @@ mod tests {
     #[test]
     fn unicode_safe_char_fallback() {
         let text = "😀😁😂🤣😃😄😅😆😉😊";
-        let chunks = RecursiveChunker::new(3, 0, None).unwrap().chunk(text).unwrap();
+        let chunks = RecursiveChunker::new(3, 0, None)
+            .unwrap()
+            .chunk(text)
+            .unwrap();
         assert_eq!(chunks.len(), 4);
         assert_char_offsets(text, &chunks);
     }

@@ -55,7 +55,11 @@ fn parse_blocks(text: &str) -> Vec<Block> {
             }
             Event::End(_) => depth -= 1,
             Event::Rule | Event::Html(_) if depth == 0 => {
-                blocks.push(Block { span: (range.start, range.end), is_code: false, heading: None });
+                blocks.push(Block {
+                    span: (range.start, range.end),
+                    is_code: false,
+                    heading: None,
+                });
             }
             _ => {}
         }
@@ -74,7 +78,11 @@ impl MarkdownChunker {
             ));
         }
         let splitter = RecursiveChunker::new(chunk_size, chunk_overlap, None)?;
-        Ok(Self { chunk_size, chunk_overlap, splitter })
+        Ok(Self {
+            chunk_size,
+            chunk_overlap,
+            splitter,
+        })
     }
 
     fn flush_section(
@@ -166,7 +174,9 @@ mod tests {
     fn breadcrumbs_prefix_chunks() {
         let chunks = MarkdownChunker::new(200, 0).unwrap().chunk(MD).unwrap();
         assert!(chunks[0].text.starts_with("# Guide\n\nIntro paragraph"));
-        assert!(chunks.iter().any(|c| c.text.starts_with("# Guide > ## Install")));
+        assert!(chunks
+            .iter()
+            .any(|c| c.text.starts_with("# Guide > ## Install")));
         for c in &chunks {
             assert!(c.text.ends_with(&source_slice(MD, c)));
         }
@@ -175,7 +185,10 @@ mod tests {
     #[test]
     fn code_fences_never_split() {
         let chunks = MarkdownChunker::new(10, 0).unwrap().chunk(MD).unwrap();
-        let code: Vec<_> = chunks.iter().filter(|c| c.text.contains("```bash")).collect();
+        let code: Vec<_> = chunks
+            .iter()
+            .filter(|c| c.text.contains("```bash"))
+            .collect();
         assert_eq!(code.len(), 1);
         assert!(code[0].text.contains("pip install konan"));
     }
@@ -202,12 +215,29 @@ mod tests {
         let md = "Title\n=====\n\nBody text here.\n\nSub\n---\n\nMore body.\n";
         let chunks = MarkdownChunker::new(200, 0).unwrap().chunk(md).unwrap();
         // No chunk should have an underline leaked into its breadcrumb
-        assert!(!chunks.iter().any(|c| c.text.contains("=====")), "underline leaked into breadcrumb");
-        assert!(!chunks.iter().any(|c| c.text.contains("---\n")), "setext underline leaked into breadcrumb");
+        assert!(
+            !chunks.iter().any(|c| c.text.contains("=====")),
+            "underline leaked into breadcrumb"
+        );
+        assert!(
+            !chunks.iter().any(|c| c.text.contains("---\n")),
+            "setext underline leaked into breadcrumb"
+        );
         // The H1 section chunk must start with the clean breadcrumb
-        assert!(chunks[0].text.starts_with("# Title\n\n"), "got: {:?}", chunks[0].text);
+        assert!(
+            chunks[0].text.starts_with("# Title\n\n"),
+            "got: {:?}",
+            chunks[0].text
+        );
         // The H2 section chunk must contain the nested breadcrumb without any underlines
-        let sub_chunk = chunks.iter().find(|c| c.text.contains("## Sub")).expect("no Sub chunk");
-        assert!(sub_chunk.text.starts_with("# Title > ## Sub\n\n"), "got: {:?}", sub_chunk.text);
+        let sub_chunk = chunks
+            .iter()
+            .find(|c| c.text.contains("## Sub"))
+            .expect("no Sub chunk");
+        assert!(
+            sub_chunk.text.starts_with("# Title > ## Sub\n\n"),
+            "got: {:?}",
+            sub_chunk.text
+        );
     }
 }

@@ -35,11 +35,15 @@ impl<E: Embedder> SemanticChunker<E> {
     ) -> Result<Self, KonanError> {
         if let Some(t) = threshold {
             if !(-1.0..=1.0).contains(&t) {
-                return Err(KonanError::InvalidConfig("threshold must be in [-1, 1]".into()));
+                return Err(KonanError::InvalidConfig(
+                    "threshold must be in [-1, 1]".into(),
+                ));
             }
         }
         if !(0.0..=100.0).contains(&percentile) {
-            return Err(KonanError::InvalidConfig("percentile must be in [0, 100]".into()));
+            return Err(KonanError::InvalidConfig(
+                "percentile must be in [0, 100]".into(),
+            ));
         }
         if let Some(m) = max_chunk_size {
             if m == 0 || m < min_chunk_size {
@@ -48,7 +52,13 @@ impl<E: Embedder> SemanticChunker<E> {
                 ));
             }
         }
-        Ok(Self { embedder, threshold, percentile, min_chunk_size, max_chunk_size })
+        Ok(Self {
+            embedder,
+            threshold,
+            percentile,
+            min_chunk_size,
+            max_chunk_size,
+        })
     }
 
     pub async fn chunk(&self, text: &str) -> Result<Vec<Chunk>, KonanError> {
@@ -70,8 +80,10 @@ impl<E: Embedder> SemanticChunker<E> {
                 sents.len()
             )));
         }
-        let sims: Vec<f32> =
-            embeddings.windows(2).map(|w| cosine_similarity(&w[0], &w[1])).collect();
+        let sims: Vec<f32> = embeddings
+            .windows(2)
+            .map(|w| cosine_similarity(&w[0], &w[1]))
+            .collect();
         if sims.iter().any(|s| s.is_nan()) {
             return Err(KonanError::Embedding(
                 "embedder returned NaN values; embeddings must be finite".into(),
@@ -82,8 +94,8 @@ impl<E: Embedder> SemanticChunker<E> {
             None => {
                 let mut distances: Vec<f32> = sims.iter().map(|s| 1.0 - s).collect();
                 distances.sort_by(|a, b| a.partial_cmp(b).expect("NaN sims rejected above"));
-                let rank = ((self.percentile / 100.0) * (distances.len() - 1) as f32).round()
-                    as usize;
+                let rank =
+                    ((self.percentile / 100.0) * (distances.len() - 1) as f32).round() as usize;
                 1.0 - distances[rank.min(distances.len() - 1)]
             }
         };
@@ -103,7 +115,9 @@ impl<E: Embedder> SemanticChunker<E> {
             let group_len = |g: &Vec<(usize, usize)>| map.char_len(g[0].0, g.last().unwrap().1);
             let mut merged: Vec<Vec<(usize, usize)>> = Vec::new();
             for g in groups {
-                let prev_small = merged.last().is_some_and(|p| group_len(p) < self.min_chunk_size);
+                let prev_small = merged
+                    .last()
+                    .is_some_and(|p| group_len(p) < self.min_chunk_size);
                 if prev_small {
                     merged.last_mut().unwrap().extend(g);
                 } else {
@@ -157,7 +171,13 @@ mod tests {
         async fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, KonanError> {
             Ok(texts
                 .iter()
-                .map(|t| if t.to_lowercase().contains("cat") { vec![1.0, 0.0] } else { vec![0.0, 1.0] })
+                .map(|t| {
+                    if t.to_lowercase().contains("cat") {
+                        vec![1.0, 0.0]
+                    } else {
+                        vec![0.0, 1.0]
+                    }
+                })
                 .collect())
         }
     }

@@ -14,7 +14,11 @@ pub struct TokenChunker {
 }
 
 impl TokenChunker {
-    pub fn new(chunk_size: usize, chunk_overlap: usize, encoding: &str) -> Result<Self, KonanError> {
+    pub fn new(
+        chunk_size: usize,
+        chunk_overlap: usize,
+        encoding: &str,
+    ) -> Result<Self, KonanError> {
         if chunk_size == 0 {
             return Err(KonanError::InvalidConfig("chunk_size must be > 0".into()));
         }
@@ -30,7 +34,11 @@ impl TokenChunker {
             "o200k_base" => bpe_openai::o200k_base(),
             other => return Err(KonanError::Tokenizer(format!("unknown encoding: {other}"))),
         };
-        Ok(Self { tokenizer, chunk_size, chunk_overlap })
+        Ok(Self {
+            tokenizer,
+            chunk_size,
+            chunk_overlap,
+        })
     }
 }
 

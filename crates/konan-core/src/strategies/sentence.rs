@@ -15,7 +15,10 @@ impl SentenceChunker {
         if max_chars == 0 {
             return Err(KonanError::InvalidConfig("max_chars must be > 0".into()));
         }
-        Ok(Self { max_chars, overlap_sentences })
+        Ok(Self {
+            max_chars,
+            overlap_sentences,
+        })
     }
 }
 
@@ -54,7 +57,8 @@ mod tests {
     use super::*;
     use crate::text::assert_char_offsets;
 
-    const TEXT: &str = "Sentence number one. Sentence number two. Sentence number three. Sentence number four.";
+    const TEXT: &str =
+        "Sentence number one. Sentence number two. Sentence number three. Sentence number four.";
 
     #[test]
     fn groups_whole_sentences() {

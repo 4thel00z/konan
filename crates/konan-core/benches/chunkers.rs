@@ -11,8 +11,26 @@ use konan_core::{
 };
 
 const WORDS: &[&str] = &[
-    "the", "quick", "brown", "fox", "jumps", "over", "lazy", "dogs", "while", "seventy",
-    "wizards", "briskly", "mix", "jugs", "of", "liquid", "oxygen", "under", "pale", "moonlight",
+    "the",
+    "quick",
+    "brown",
+    "fox",
+    "jumps",
+    "over",
+    "lazy",
+    "dogs",
+    "while",
+    "seventy",
+    "wizards",
+    "briskly",
+    "mix",
+    "jugs",
+    "of",
+    "liquid",
+    "oxygen",
+    "under",
+    "pale",
+    "moonlight",
 ];
 
 /// Deterministic ~`n_bytes` of prose: sentences of varying length, paragraph
@@ -74,22 +92,34 @@ fn bench_strategies(c: &mut Criterion) {
     group.sample_size(20);
 
     let naive = NaiveChunker::new(200).unwrap();
-    group.bench_function("naive", |b| b.iter(|| naive.chunk(black_box(&prose)).unwrap()));
+    group.bench_function("naive", |b| {
+        b.iter(|| naive.chunk(black_box(&prose)).unwrap())
+    });
 
     let fixed = FixedSizeChunker::new(1000, 200, true).unwrap();
-    group.bench_function("fixed_size", |b| b.iter(|| fixed.chunk(black_box(&prose)).unwrap()));
+    group.bench_function("fixed_size", |b| {
+        b.iter(|| fixed.chunk(black_box(&prose)).unwrap())
+    });
 
     let recursive = RecursiveChunker::new(1000, 200, None).unwrap();
-    group.bench_function("recursive", |b| b.iter(|| recursive.chunk(black_box(&prose)).unwrap()));
+    group.bench_function("recursive", |b| {
+        b.iter(|| recursive.chunk(black_box(&prose)).unwrap())
+    });
 
     let sentence = SentenceChunker::new(1000, 1).unwrap();
-    group.bench_function("sentence", |b| b.iter(|| sentence.chunk(black_box(&prose)).unwrap()));
+    group.bench_function("sentence", |b| {
+        b.iter(|| sentence.chunk(black_box(&prose)).unwrap())
+    });
 
     let md = MarkdownChunker::new(1000, 200).unwrap();
-    group.bench_function("markdown", |b| b.iter(|| md.chunk(black_box(&markdown)).unwrap()));
+    group.bench_function("markdown", |b| {
+        b.iter(|| md.chunk(black_box(&markdown)).unwrap())
+    });
 
     let token = TokenChunker::new(512, 64, "cl100k_base").unwrap();
-    group.bench_function("token", |b| b.iter(|| token.chunk(black_box(&prose)).unwrap()));
+    group.bench_function("token", |b| {
+        b.iter(|| token.chunk(black_box(&prose)).unwrap())
+    });
 
     group.finish();
 }

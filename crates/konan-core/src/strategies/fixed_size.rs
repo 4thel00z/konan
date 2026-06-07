@@ -68,17 +68,27 @@ mod tests {
 
     #[test]
     fn respects_sentence_boundaries() {
-        let chunks = FixedSizeChunker::new(45, 0, true).unwrap().chunk(TEXT).unwrap();
+        let chunks = FixedSizeChunker::new(45, 0, true)
+            .unwrap()
+            .chunk(TEXT)
+            .unwrap();
         assert!(chunks.len() >= 2);
         for c in &chunks {
-            assert!(c.text.ends_with(['.', '!', '?']), "broke mid-sentence: {:?}", c.text);
+            assert!(
+                c.text.ends_with(['.', '!', '?']),
+                "broke mid-sentence: {:?}",
+                c.text
+            );
         }
         assert_char_offsets(TEXT, &chunks);
     }
 
     #[test]
     fn overlap_repeats_content() {
-        let chunks = FixedSizeChunker::new(45, 25, true).unwrap().chunk(TEXT).unwrap();
+        let chunks = FixedSizeChunker::new(45, 25, true)
+            .unwrap()
+            .chunk(TEXT)
+            .unwrap();
         assert!(chunks.len() >= 2);
         assert!(chunks[1].start < chunks[0].end, "no overlap produced");
         assert_char_offsets(TEXT, &chunks);
@@ -86,7 +96,10 @@ mod tests {
 
     #[test]
     fn short_text_is_single_chunk() {
-        let chunks = FixedSizeChunker::new(1000, 200, true).unwrap().chunk("tiny").unwrap();
+        let chunks = FixedSizeChunker::new(1000, 200, true)
+            .unwrap()
+            .chunk("tiny")
+            .unwrap();
         assert_eq!(chunks.len(), 1);
         assert_eq!(chunks[0].text, "tiny");
     }
@@ -94,7 +107,10 @@ mod tests {
     #[test]
     fn word_fallback_without_sentences() {
         let text = "word ".repeat(50);
-        let chunks = FixedSizeChunker::new(60, 10, true).unwrap().chunk(&text).unwrap();
+        let chunks = FixedSizeChunker::new(60, 10, true)
+            .unwrap()
+            .chunk(&text)
+            .unwrap();
         assert!(chunks.len() > 1);
         assert_char_offsets(&text, &chunks);
     }

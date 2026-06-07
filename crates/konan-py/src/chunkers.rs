@@ -47,7 +47,11 @@ impl PyNaiveChunker {
     fn chunk_async<'p>(&self, py: Python<'p>, text: String) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_async(py, Arc::clone(&self.inner), text)
     }
-    fn chunk_many_async<'p>(&self, py: Python<'p>, texts: Vec<String>) -> PyResult<Bound<'p, PyAny>> {
+    fn chunk_many_async<'p>(
+        &self,
+        py: Python<'p>,
+        texts: Vec<String>,
+    ) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_many_async(py, Arc::clone(&self.inner), texts)
     }
 }
@@ -87,7 +91,11 @@ impl PyFixedSizeChunker {
     fn chunk_async<'p>(&self, py: Python<'p>, text: String) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_async(py, Arc::clone(&self.inner), text)
     }
-    fn chunk_many_async<'p>(&self, py: Python<'p>, texts: Vec<String>) -> PyResult<Bound<'p, PyAny>> {
+    fn chunk_many_async<'p>(
+        &self,
+        py: Python<'p>,
+        texts: Vec<String>,
+    ) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_many_async(py, Arc::clone(&self.inner), texts)
     }
 }
@@ -102,12 +110,19 @@ pub struct PyRecursiveChunker {
 impl PyRecursiveChunker {
     #[new]
     #[pyo3(signature = (chunk_size=1000, chunk_overlap=200, separators=None))]
-    fn new(chunk_size: usize, chunk_overlap: usize, separators: Option<Vec<String>>) -> PyResult<Self> {
+    fn new(
+        chunk_size: usize,
+        chunk_overlap: usize,
+        separators: Option<Vec<String>>,
+    ) -> PyResult<Self> {
         let separators_repr = match &separators {
             None => "None".to_string(),
             Some(seps) => format!(
                 "[{}]",
-                seps.iter().map(|s| format!("{s:?}")).collect::<Vec<_>>().join(", ")
+                seps.iter()
+                    .map(|s| format!("{s:?}"))
+                    .collect::<Vec<_>>()
+                    .join(", ")
             ),
         };
         Ok(Self {
@@ -132,7 +147,11 @@ impl PyRecursiveChunker {
     fn chunk_async<'p>(&self, py: Python<'p>, text: String) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_async(py, Arc::clone(&self.inner), text)
     }
-    fn chunk_many_async<'p>(&self, py: Python<'p>, texts: Vec<String>) -> PyResult<Bound<'p, PyAny>> {
+    fn chunk_many_async<'p>(
+        &self,
+        py: Python<'p>,
+        texts: Vec<String>,
+    ) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_many_async(py, Arc::clone(&self.inner), texts)
     }
 }
@@ -167,7 +186,11 @@ impl PySentenceChunker {
     fn chunk_async<'p>(&self, py: Python<'p>, text: String) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_async(py, Arc::clone(&self.inner), text)
     }
-    fn chunk_many_async<'p>(&self, py: Python<'p>, texts: Vec<String>) -> PyResult<Bound<'p, PyAny>> {
+    fn chunk_many_async<'p>(
+        &self,
+        py: Python<'p>,
+        texts: Vec<String>,
+    ) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_many_async(py, Arc::clone(&self.inner), texts)
     }
 }
@@ -202,7 +225,11 @@ impl PyMarkdownChunker {
     fn chunk_async<'p>(&self, py: Python<'p>, text: String) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_async(py, Arc::clone(&self.inner), text)
     }
-    fn chunk_many_async<'p>(&self, py: Python<'p>, texts: Vec<String>) -> PyResult<Bound<'p, PyAny>> {
+    fn chunk_many_async<'p>(
+        &self,
+        py: Python<'p>,
+        texts: Vec<String>,
+    ) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_many_async(py, Arc::clone(&self.inner), texts)
     }
 }
@@ -240,7 +267,11 @@ impl PyTokenChunker {
     fn chunk_async<'p>(&self, py: Python<'p>, text: String) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_async(py, Arc::clone(&self.inner), text)
     }
-    fn chunk_many_async<'p>(&self, py: Python<'p>, texts: Vec<String>) -> PyResult<Bound<'p, PyAny>> {
+    fn chunk_many_async<'p>(
+        &self,
+        py: Python<'p>,
+        texts: Vec<String>,
+    ) -> PyResult<Bound<'p, PyAny>> {
         do_chunk_many_async(py, Arc::clone(&self.inner), texts)
     }
 }

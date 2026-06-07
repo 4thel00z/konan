@@ -45,8 +45,16 @@ impl PyOpenAIEmbedder {
         );
         Ok(Self {
             inner: Arc::new(
-                OpenAIEmbedder::new(base_url, model, api_key, batch_size, timeout, max_retries, dimensions)
-                    .map_err(to_py_err)?,
+                OpenAIEmbedder::new(
+                    base_url,
+                    model,
+                    api_key,
+                    batch_size,
+                    timeout,
+                    max_retries,
+                    dimensions,
+                )
+                .map_err(to_py_err)?,
             ),
             repr,
         })
@@ -85,7 +93,9 @@ impl Embedder for PyCallableEmbedder {
             pyo3_async_runtimes::tokio::into_future(coro)
                 .map_err(|e| KonanError::Embedding(e.to_string()))
         })?;
-        let result = fut.await.map_err(|e| KonanError::Embedding(e.to_string()))?;
+        let result = fut
+            .await
+            .map_err(|e| KonanError::Embedding(e.to_string()))?;
         Python::with_gil(|py| {
             result
                 .bind(py)
@@ -121,7 +131,9 @@ impl PySemanticChunker {
                 (Arc::clone(&native.inner) as Arc<dyn Embedder>, repr, false)
             } else if embedder.is_callable() {
                 (
-                    Arc::new(PyCallableEmbedder { callable: embedder.unbind() }),
+                    Arc::new(PyCallableEmbedder {
+                        callable: embedder.unbind(),
+                    }),
                     "<async callable>".to_string(),
                     true,
                 )
@@ -139,9 +151,14 @@ impl PySemanticChunker {
             },
             fmt_opt(&max_chunk_size),
         );
-        let inner = SemanticChunker::new(port, threshold, percentile, min_chunk_size, max_chunk_size)
-            .map_err(to_py_err)?;
-        Ok(Self { inner: Arc::new(inner), repr, embedder_is_py_callable })
+        let inner =
+            SemanticChunker::new(port, threshold, percentile, min_chunk_size, max_chunk_size)
+                .map_err(to_py_err)?;
+        Ok(Self {
+            inner: Arc::new(inner),
+            repr,
+            embedder_is_py_callable,
+        })
     }
 
     fn __repr__(&self) -> &str {
@@ -192,7 +209,11 @@ impl PySemanticChunker {
         })
     }
 
-    fn chunk_many_async<'p>(&self, py: Python<'p>, texts: Vec<String>) -> PyResult<Bound<'p, PyAny>> {
+    fn chunk_many_async<'p>(
+        &self,
+        py: Python<'p>,
+        texts: Vec<String>,
+    ) -> PyResult<Bound<'p, PyAny>> {
         let inner = Arc::clone(&self.inner);
         pyo3_async_runtimes::tokio::future_into_py(py, async move {
             let results = inner.chunk_many(&texts).await.map_err(to_py_err)?;

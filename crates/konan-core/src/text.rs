@@ -18,7 +18,9 @@ impl OffsetMap {
         }
         let mut char_starts: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
         char_starts.push(text.len());
-        Self { char_starts: Some(char_starts) }
+        Self {
+            char_starts: Some(char_starts),
+        }
     }
 
     /// Char index for a byte offset lying on a char boundary.
@@ -169,7 +171,10 @@ mod tests {
     #[test]
     fn offset_map_ascii_fast_path() {
         let map = OffsetMap::new("plain ascii text");
-        assert!(map.char_starts.is_none(), "ASCII text must skip the char table");
+        assert!(
+            map.char_starts.is_none(),
+            "ASCII text must skip the char table"
+        );
         assert_eq!(map.char_idx(0), 0);
         assert_eq!(map.char_idx(7), 7);
         assert_eq!(map.char_idx(16), 16);
@@ -178,7 +183,10 @@ mod tests {
 
     #[test]
     fn word_spans_basic() {
-        assert_eq!(word_spans("one  two\nthree "), vec![(0, 3), (5, 8), (9, 14)]);
+        assert_eq!(
+            word_spans("one  two\nthree "),
+            vec![(0, 3), (5, 8), (9, 14)]
+        );
         assert!(word_spans("   ").is_empty());
     }
 
