@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.3](https://github.com/4thel00z/konan/compare/v0.2.2...v0.2.3) (2026-06-07)
+
+
+### Documentation
+
+* tighten README wording ([ec1cb91](https://github.com/4thel00z/konan/commit/ec1cb91d8fc48444484089fcde767861153065b2))
+
 ## [0.2.2](https://github.com/4thel00z/konan/compare/v0.2.1...v0.2.2) (2026-06-07)
 
 
