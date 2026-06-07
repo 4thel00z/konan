@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.2.2](https://github.com/4thel00z/konan/compare/v0.2.1...v0.2.2) (2026-06-07)
+
+
+### Bug Fixes
+
+* include workspace-root LICENSE in sdist, skip-existing on publish ([84a090a](https://github.com/4thel00z/konan/commit/84a090abb2997088f9543103671fa2a2fcb4f5e7))
+
 ## [0.2.1](https://github.com/4thel00z/konan/compare/v0.2.0...v0.2.1) (2026-06-07)
 
 
