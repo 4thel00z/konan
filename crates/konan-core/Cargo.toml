@@ -11,6 +11,8 @@ async-openai = { version = "0.41", default-features = false, features = ["rustls
 async-trait = "0.1"
 bpe-openai = "0.3.0"
 futures = "0.3"
+icu_segmenter = { version = "2.2.0", default-features = false, features = ["compiled_data"] }
+memchr = "2.8.1"
 pulldown-cmark = { version = "0.13", default-features = false }
 rayon = "1.10"
 regex = "1"
@@ -18,7 +20,6 @@ reqwest = { version = "0.13", default-features = false }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
 tower = "0.5"
-unicode-segmentation = "1.12"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
 [dev-dependencies]
