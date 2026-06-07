@@ -56,7 +56,7 @@ fn make_prose(n_bytes: usize) -> String {
         out.push(' ');
         w += len;
         sentence += 1;
-        if sentence % 8 == 0 {
+        if sentence.is_multiple_of(8) {
             out.push_str("\n\n");
         }
     }
@@ -74,7 +74,7 @@ fn make_markdown(n_bytes: usize) -> String {
             out.push_str(&format!("## Topic {section}.{sub}\n\n"));
             out.push_str(&make_prose(700));
             out.push_str("\n\n");
-            if (section + sub) % 3 == 0 {
+            if (section + sub).is_multiple_of(3) {
                 out.push_str("```python\nfor i in range(10):\n    print(i)\n```\n\n");
             }
         }
