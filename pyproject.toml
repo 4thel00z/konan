@@ -22,8 +22,8 @@ classifiers = [
 ]
 
 [project.urls]
-Repository = "https://github.com/underdoc-com/konan"
-Issues = "https://github.com/underdoc-com/konan/issues"
+Repository = "https://github.com/4thel00z/konan"
+Issues = "https://github.com/4thel00z/konan/issues"
 
 [project.optional-dependencies]
 bench = [

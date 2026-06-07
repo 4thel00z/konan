@@ -10,8 +10,8 @@
 
 <p align="center">
   <a href="https://pypi.org/project/konan/"><img alt="PyPI" src="https://img.shields.io/pypi/v/konan"></a>
-  <a href="https://github.com/underdoc-com/konan/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/underdoc-com/konan/actions/workflows/ci.yaml/badge.svg"></a>
-  <a href="https://github.com/underdoc-com/konan/actions/workflows/python-ci.yml"><img alt="python-ci" src="https://github.com/underdoc-com/konan/actions/workflows/python-ci.yml/badge.svg"></a>
+  <a href="https://github.com/4thel00z/konan/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/4thel00z/konan/actions/workflows/ci.yaml/badge.svg"></a>
+  <a href="https://github.com/4thel00z/konan/actions/workflows/python-ci.yml"><img alt="python-ci" src="https://github.com/4thel00z/konan/actions/workflows/python-ci.yml/badge.svg"></a>
   <a href="#installation"><img alt="Python 3.12+" src="https://img.shields.io/badge/python-3.12%2B-blue"></a>
   <img alt="Rust" src="https://img.shields.io/badge/core-rust-orange">
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-green">

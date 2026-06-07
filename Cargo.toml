@@ -6,4 +6,4 @@ members = ["crates/konan-core", "crates/konan-py"]
 version = "0.1.0" # x-release-please-version
 edition = "2021"
 license = "MIT"
-repository = "https://github.com/underdoc-com/konan"
+repository = "https://github.com/4thel00z/konan"
