@@ -4,6 +4,7 @@ description = "Blazingly fast text chunking strategies"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+repository.workspace = true
 
 [dependencies]
 async-openai = { version = "0.41", default-features = false, features = ["rustls", "embedding", "middleware"] }

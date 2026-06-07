@@ -8,10 +8,22 @@ version = "0.1.0"
 description = "Blazingly fast text chunkers in Rust with pythonic bindings"
 readme = "README.md"
 requires-python = ">=3.12"
+license = "MIT"
+authors = [{ name = "4thel00z" }]
+keywords = ["chunking", "text-splitting", "rag", "embeddings", "tokenizer", "rust"]
 classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
     "Programming Language :: Rust",
+    "Programming Language :: Python :: 3.12",
     "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Text Processing",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
 ]
+
+[project.urls]
+Repository = "https://github.com/underdoc-com/konan"
+Issues = "https://github.com/underdoc-com/konan/issues"
 
 [project.optional-dependencies]
 bench = [
