@@ -5,6 +5,7 @@ pub mod chunker;
 pub mod embedder;
 pub mod error;
 pub mod strategies;
+pub mod semantic;
 pub(crate) mod text;
 
 pub use chunk::Chunk;
@@ -17,3 +18,4 @@ pub use strategies::naive::NaiveChunker;
 pub use strategies::recursive::RecursiveChunker;
 pub use strategies::sentence::SentenceChunker;
 pub use strategies::token::TokenChunker;
+pub use semantic::SemanticChunker;
