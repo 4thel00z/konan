@@ -1,14 +1,20 @@
 use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
-use crate::text::{merge_spans, regex_sentence_spans, spans_to_chunks, word_spans, OffsetMap};
+use crate::text::{merge_span_iter, spans_to_chunks, OffsetMap, SentenceUnits, WordUnits};
 
 /// Character-based chunker with overlap and sentence-boundary awareness.
+///
+/// Unit boundaries (sentences, or words as the fallback) are produced by
+/// lazy memchr-accelerated scanners and merged on the fly — the merge
+/// semantics are byte-identical to the original materialise-then-merge
+/// implementation (enforced by the equivalence test below), but nothing
+/// allocates per unit, which makes the strategy several times faster on
+/// sentence-dense prose.
 pub struct FixedSizeChunker {
     chunk_size: usize,
     chunk_overlap: usize,
     respect_sentences: bool,
-    sentence_re: regex::Regex,
 }
 
 impl FixedSizeChunker {
@@ -29,7 +35,6 @@ impl FixedSizeChunker {
             chunk_size,
             chunk_overlap,
             respect_sentences,
-            sentence_re: regex::Regex::new(r"[.!?]+\s+").expect("static regex"),
         })
     }
 }
@@ -43,8 +48,62 @@ impl Chunker for FixedSizeChunker {
         if map.char_len(0, text.len()) <= self.chunk_size {
             return Ok(spans_to_chunks(text, &map, &[(0, text.len())]));
         }
-        let units = if self.respect_sentences {
-            let sents = regex_sentence_spans(text, &self.sentence_re);
+        // Sentence mode applies when at least two sentence units exist
+        // (the legacy `spans.len() > 1` check), probed lazily.
+        let merged = if self.respect_sentences {
+            let mut probe = SentenceUnits::new(text);
+            let first = probe.next();
+            let second = probe.next();
+            match (first, second) {
+                (Some(a), Some(b)) => {
+                    let units = [a, b].into_iter().chain(probe);
+                    merge_span_iter(&map, units, self.chunk_size, self.chunk_overlap)
+                }
+                _ => merge_span_iter(
+                    &map,
+                    WordUnits::new(text),
+                    self.chunk_size,
+                    self.chunk_overlap,
+                ),
+            }
+        } else {
+            merge_span_iter(
+                &map,
+                WordUnits::new(text),
+                self.chunk_size,
+                self.chunk_overlap,
+            )
+        };
+        Ok(spans_to_chunks(text, &map, &merged))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::text::{assert_char_offsets, merge_spans, regex_sentence_spans, word_spans};
+
+    const TEXT: &str =
+        "First sentence here. Second sentence follows! Third one now? Fourth and final.";
+
+    /// The previous regex-and-materialise implementation, kept as the
+    /// oracle for the equivalence test.
+    fn chunk_reference(
+        text: &str,
+        chunk_size: usize,
+        chunk_overlap: usize,
+        respect_sentences: bool,
+    ) -> Vec<Chunk> {
+        let sentence_re = regex::Regex::new(r"[.!?]+\s+").expect("static regex");
+        if text.trim().is_empty() {
+            return Vec::new();
+        }
+        let map = OffsetMap::new(text);
+        if map.char_len(0, text.len()) <= chunk_size {
+            return spans_to_chunks(text, &map, &[(0, text.len())]);
+        }
+        let units = if respect_sentences {
+            let sents = regex_sentence_spans(text, &sentence_re);
             if sents.len() > 1 {
                 sents
             } else {
@@ -53,18 +112,67 @@ impl Chunker for FixedSizeChunker {
         } else {
             word_spans(text)
         };
-        let merged = merge_spans(&map, &units, self.chunk_size, self.chunk_overlap);
-        Ok(spans_to_chunks(text, &map, &merged))
+        let merged = merge_spans(&map, &units, chunk_size, chunk_overlap);
+        spans_to_chunks(text, &map, &merged)
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::text::assert_char_offsets;
+    fn assert_equivalent(text: &str, chunk_size: usize, chunk_overlap: usize, respect: bool) {
+        let new = FixedSizeChunker::new(chunk_size, chunk_overlap, respect)
+            .unwrap()
+            .chunk(text)
+            .unwrap();
+        let old = chunk_reference(text, chunk_size, chunk_overlap, respect);
+        assert_eq!(
+            new, old,
+            "divergence: size={chunk_size} overlap={chunk_overlap} respect={respect} text={text:?}"
+        );
+    }
 
-    const TEXT: &str =
-        "First sentence here. Second sentence follows! Third one now? Fourth and final.";
+    #[test]
+    fn matches_reference_implementation() {
+        let corpora: Vec<String> = vec![
+            TEXT.to_string(),
+            "word ".repeat(50),
+            "  leading whitespace. And more text here! Trailing too.   ".to_string(),
+            "Short. This single sentence is much longer than the limit allows obviously. End."
+                .to_string(),
+            "One enormous sentence without any terminal punctuation just words all the way down "
+                .repeat(4),
+            "Multi?! Punct... runs!! Everywhere?! Yes... Indeed!".to_string(),
+            "Ends mid.word and v1.2 stays whole. Real boundary here! ok.".to_string(),
+            "Caf\u{e9} na\u{ef}ve \u{1f980} crab. \u{65e5}\u{672c}\u{8a9e}\u{306e}\u{6587}. More \u{fc}nicode here! Done."
+                .repeat(8),
+            "Nbsp\u{a0}separated. Ideographic\u{3000}space too! And tab\tnewline\nvtab\u{b}breaks. End."
+                .to_string(),
+            {
+                let mut s = String::new();
+                for i in 0..200 {
+                    let len = 3 + (i * 7) % 11;
+                    for k in 0..len {
+                        s.push_str(["alpha", "beta", "gamma", "delta"][(i + k) % 4]);
+                        s.push(if k + 1 == len { '.' } else { ' ' });
+                    }
+                    s.push(' ');
+                    if i % 9 == 0 {
+                        s.push_str("\n\n");
+                    }
+                }
+                s
+            },
+        ];
+        for text in &corpora {
+            for &size in &[30usize, 45, 100, 400] {
+                for &overlap in &[0usize, 10, 25] {
+                    if overlap >= size {
+                        continue;
+                    }
+                    for &respect in &[true, false] {
+                        assert_equivalent(text, size, overlap, respect);
+                    }
+                }
+            }
+        }
+    }
 
     #[test]
     fn respects_sentence_boundaries() {
