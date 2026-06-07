@@ -142,12 +142,12 @@ criterion benches: `cargo bench -p konan-core`._
 
 | Chunker | Config | Throughput | Chunks |
 |---|---|---:|---:|
-| `NaiveChunker` | 200 words | 200 MB/s | 804 |
-| `FixedSizeChunker` | 1000 chars, 200 overlap | 188 MB/s | 1255 |
-| `RecursiveChunker` | 1000 chars, 200 overlap | 72 MB/s | 1298 |
-| `SentenceChunker` | 1000 chars, 1 overlap | 53 MB/s | 1130 |
-| `MarkdownChunker` | 1000 chars, 200 overlap | 130 MB/s | 1511 |
-| `TokenChunker` | 512 tokens, 64 overlap (cl100k) | 14 MB/s | 438 |
+| `NaiveChunker` | 200 words | 561 MB/s | 804 |
+| `FixedSizeChunker` | 1000 chars, 200 overlap | 1,104 MB/s | 1255 |
+| `RecursiveChunker` | 1000 chars, 200 overlap | 296 MB/s | 1298 |
+| `SentenceChunker` | 1000 chars, 1 overlap | 70 MB/s | 1130 |
+| `MarkdownChunker` | 1000 chars, 200 overlap | 469 MB/s | 1511 |
+| `TokenChunker` | 512 tokens, 64 overlap (cl100k) | 68 MB/s | 438 |
 
 ### Parallel scaling — rayon goes brrr
 
@@ -155,31 +155,31 @@ criterion benches: `cargo bench -p konan-core`._
 
 | Mode | Time | Throughput | Speedup |
 |---|---:|---:|---:|
-| sequential `chunk()` loop | 207 ms | 79 MB/s | 1.0× |
-| `chunk_many()` (rayon, GIL released) | 35 ms | 473 MB/s | **6.0×** |
+| sequential `chunk()` loop | 59 ms | 280 MB/s | 1.0× |
+| `chunk_many()` (rayon, GIL released) | 11 ms | 1,544 MB/s | **5.5×** |
 
-(Pure-Rust criterion shows the same workload at 1.4 GiB/s — the Python gap
-is chunk-object conversion, which `chunk_many` amortizes across cores.)
+(Pure-Rust criterion puts the same workload at ~6 GiB/s; the Python numbers
+include chunk-object conversion.)
 
 ### vs other libraries (same 1 MB document)
 
 | Strategy | Library | Throughput | Chunks |
 |---|---|---:|---:|
-| recursive | **konan** | 69 MB/s | 1298 |
+| recursive | **konan** | 290 MB/s | 1298 |
 | recursive | langchain-text-splitters | 26 MB/s | 1468 |
 | recursive | chonkie | 88 MB/s | 1413 |
-| token | **konan** | 14 MB/s | 438 |
+| token | **konan** | 69 MB/s | 438 |
 | token | langchain-text-splitters | 22 MB/s | 438 |
-| token | chonkie | 18 MB/s | 438 |
-| sentence | **konan** | 57 MB/s | 1042 |
+| token | chonkie | 19 MB/s | 438 |
+| sentence | **konan** | 68 MB/s | 1042 |
 | sentence | chonkie | 3 MB/s | 2124 |
 
 Caveats, honestly: recursive/token use identical configs across libraries
-(1000 chars / 200 overlap; cl100k, 512 / 64). Sentence configs are not
-directly comparable (konan groups by chars, chonkie by tokens) — read those
-rows as per-library cost, not head-to-head. Token chunking is
-tokenizer-bound everywhere: konan currently uses `tiktoken-rs`, whose
-encoder trails OpenAI's `tiktoken` (used by langchain) by ~30%.
+(1000 chars / 200 overlap; cl100k, 512 / 64 — note the identical token chunk
+counts). Sentence configs are not directly comparable (konan groups by
+chars, chonkie by tokens) — read those rows as per-library cost, not
+head-to-head. konan tokenizes with [`bpe-openai`](https://crates.io/crates/bpe-openai)
+(tiktoken-equivalent output, much faster encoder).
 
 ## Development
 

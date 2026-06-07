@@ -8,6 +8,7 @@ license.workspace = true
 [dependencies]
 async-openai = { version = "0.41", default-features = false, features = ["rustls", "embedding", "middleware"] }
 async-trait = "0.1"
+bpe-openai = "0.3.0"
 futures = "0.3"
 pulldown-cmark = { version = "0.13", default-features = false }
 rayon = "1.10"
@@ -15,7 +16,6 @@ regex = "1"
 reqwest = { version = "0.13", default-features = false }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
-tiktoken-rs = "0.7"
 tower = "0.5"
 unicode-segmentation = "1.12"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }

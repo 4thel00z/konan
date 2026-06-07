@@ -5,24 +5,36 @@ use crate::chunk::Chunk;
 
 pub(crate) struct OffsetMap {
     /// Byte offset of each char, plus a sentinel equal to text.len().
-    char_starts: Vec<usize>,
+    /// `None` for pure-ASCII text, where char offset == byte offset — this
+    /// skips both the per-char Vec build and the binary searches, which
+    /// dominate chunking time on large ASCII documents.
+    char_starts: Option<Vec<usize>>,
 }
 
 impl OffsetMap {
     pub fn new(text: &str) -> Self {
+        if text.is_ascii() {
+            return Self { char_starts: None };
+        }
         let mut char_starts: Vec<usize> = text.char_indices().map(|(b, _)| b).collect();
         char_starts.push(text.len());
-        Self { char_starts }
+        Self { char_starts: Some(char_starts) }
     }
 
     /// Char index for a byte offset lying on a char boundary.
     pub fn char_idx(&self, byte: usize) -> usize {
-        self.char_starts.binary_search(&byte).unwrap_or_else(|i| i - 1)
+        match &self.char_starts {
+            None => byte,
+            Some(starts) => starts.binary_search(&byte).unwrap_or_else(|i| i - 1),
+        }
     }
 
     /// Char length of the byte span [start, end).
     pub fn char_len(&self, start: usize, end: usize) -> usize {
-        self.char_idx(end) - self.char_idx(start)
+        match &self.char_starts {
+            None => end - start,
+            Some(_) => self.char_idx(end) - self.char_idx(start),
+        }
     }
 }
 
@@ -152,6 +164,16 @@ mod tests {
         assert_eq!(map.char_idx(5), 2);
         assert_eq!(map.char_idx(6), 3);
         assert_eq!(map.char_len(1, 5), 1);
+    }
+
+    #[test]
+    fn offset_map_ascii_fast_path() {
+        let map = OffsetMap::new("plain ascii text");
+        assert!(map.char_starts.is_none(), "ASCII text must skip the char table");
+        assert_eq!(map.char_idx(0), 0);
+        assert_eq!(map.char_idx(7), 7);
+        assert_eq!(map.char_idx(16), 16);
+        assert_eq!(map.char_len(6, 11), 5);
     }
 
     #[test]

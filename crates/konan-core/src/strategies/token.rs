@@ -2,12 +2,13 @@ use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
 use crate::text::OffsetMap;
-use tiktoken_rs::CoreBPE;
+use bpe_openai::Tokenizer;
 
-/// Token-exact chunker via tiktoken. `chunk_size`/`chunk_overlap` are in
-/// tokens. Supported encodings: "cl100k_base", "o200k_base".
+/// Token-exact chunker via bpe-openai (tiktoken-equivalent tokenization,
+/// substantially faster encoder). `chunk_size`/`chunk_overlap` are in tokens.
+/// Supported encodings: "cl100k_base", "o200k_base".
 pub struct TokenChunker {
-    bpe: CoreBPE,
+    tokenizer: &'static Tokenizer,
     chunk_size: usize,
     chunk_overlap: usize,
 }
@@ -22,13 +23,14 @@ impl TokenChunker {
                 "chunk_overlap must be smaller than chunk_size".into(),
             ));
         }
-        let bpe = match encoding {
-            "cl100k_base" => tiktoken_rs::cl100k_base(),
-            "o200k_base" => tiktoken_rs::o200k_base(),
+        // Both supported encodings skip NFC normalization, so token byte
+        // lengths map directly onto the input text — required for offsets.
+        let tokenizer = match encoding {
+            "cl100k_base" => bpe_openai::cl100k_base(),
+            "o200k_base" => bpe_openai::o200k_base(),
             other => return Err(KonanError::Tokenizer(format!("unknown encoding: {other}"))),
-        }
-        .map_err(|e| KonanError::Tokenizer(e.to_string()))?;
-        Ok(Self { bpe, chunk_size, chunk_overlap })
+        };
+        Ok(Self { tokenizer, chunk_size, chunk_overlap })
     }
 }
 
@@ -37,21 +39,17 @@ impl Chunker for TokenChunker {
         if text.is_empty() {
             return Ok(Vec::new());
         }
-        let tokens = self.bpe.encode_ordinary(text);
+        let tokens = self.tokenizer.encode(text);
         if tokens.is_empty() {
             return Ok(Vec::new());
         }
-        // Byte offset where each token starts, plus a sentinel.
-        // DEVIATION: `decode_bytes` is pub(crate) in tiktoken-rs 0.7, so we use
-        // `_decode_native_and_split` (raw byte slices per token) to build the same
-        // `offsets` vector (byte offset where each token starts, plus sentinel).
-        // `split_by_token_iter` was not used because it applies `from_utf8_lossy`,
-        // which changes byte lengths for non-UTF-8 token bytes (e.g. emoji byte fragments).
+        // Byte offset where each token starts, plus a sentinel. `token_len`
+        // is an O(1) dictionary lookup of the token's raw byte length.
         let mut offsets = Vec::with_capacity(tokens.len() + 1);
         let mut pos = 0usize;
-        for raw_bytes in self.bpe._decode_native_and_split(tokens.clone()) {
+        for &tok in &tokens {
             offsets.push(pos);
-            pos += raw_bytes.len();
+            pos += self.tokenizer.bpe.token_len(tok);
         }
         offsets.push(pos);
 
@@ -98,7 +96,7 @@ mod tests {
         let chunks = chunker.chunk(&text).unwrap();
         assert!(chunks.len() > 1);
         for c in &chunks {
-            let n = chunker.bpe.encode_ordinary(&c.text).len();
+            let n = chunker.tokenizer.count(c.text.as_str());
             assert!(n <= 9, "chunk has {n} tokens"); // +1 slack for boundary snapping
         }
         assert_char_offsets(&text, &chunks);
@@ -127,6 +125,21 @@ mod tests {
         let chunker = TokenChunker::new(2, 0, "cl100k_base").unwrap();
         let text = "😀😁😂🤣😃 schön müde";
         let chunks = chunker.chunk(text).unwrap();
+        assert_char_offsets(text, &chunks);
+    }
+
+    #[test]
+    fn token_offsets_cover_source_exactly() {
+        // The per-token byte lengths must tile the source text: with zero
+        // overlap, chunks must be contiguous and cover the whole input.
+        let chunker = TokenChunker::new(16, 0, "o200k_base").unwrap();
+        let text = "Zwölf Boxkämpfer jagen Viktor quer über den großen Sylter Deich. 😀 done.";
+        let chunks = chunker.chunk(text).unwrap();
+        assert_eq!(chunks[0].start, 0);
+        assert_eq!(chunks.last().unwrap().end, text.chars().count());
+        for pair in chunks.windows(2) {
+            assert_eq!(pair[0].end, pair[1].start);
+        }
         assert_char_offsets(text, &chunks);
     }
 }
