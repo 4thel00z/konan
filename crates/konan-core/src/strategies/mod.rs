@@ -3,3 +3,4 @@ pub mod markdown;
 pub mod naive;
 pub mod recursive;
 pub mod sentence;
+pub mod token;

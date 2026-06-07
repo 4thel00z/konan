@@ -14,3 +14,4 @@ pub use strategies::markdown::MarkdownChunker;
 pub use strategies::naive::NaiveChunker;
 pub use strategies::recursive::RecursiveChunker;
 pub use strategies::sentence::SentenceChunker;
+pub use strategies::token::TokenChunker;
