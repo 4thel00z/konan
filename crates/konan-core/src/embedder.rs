@@ -24,6 +24,13 @@ impl<T: Embedder + ?Sized> Embedder for std::sync::Arc<T> {
     }
 }
 
+#[async_trait]
+impl<T: Embedder + ?Sized> Embedder for Box<T> {
+    async fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, KonanError> {
+        (**self).embed(texts).await
+    }
+}
+
 /// Adapter: any OpenAI-compatible `/embeddings` endpoint, backed by the
 /// async-openai client. Requests are batched, bounded by a request timeout,
 /// and retried by the client's retry layer (exponential backoff, honoring

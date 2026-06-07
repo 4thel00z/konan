@@ -106,9 +106,10 @@ pub(crate) fn merge_spans(
                 if acc + len > chunk_overlap {
                     break;
                 }
-                keep.insert(0, w);
+                keep.push(w);
                 acc += len;
             }
+            keep.reverse();
             window = keep;
         }
         window.push(span);

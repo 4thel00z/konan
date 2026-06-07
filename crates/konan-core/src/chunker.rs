@@ -7,6 +7,9 @@ pub trait Chunker: Send + Sync {
 }
 
 /// Chunk many texts in parallel with rayon.
+///
+/// Fail-fast: if any text fails, one error is returned (non-deterministic
+/// when several fail concurrently) and all partial results are discarded.
 pub fn chunk_many<C: Chunker + ?Sized>(
     chunker: &C,
     texts: &[String],

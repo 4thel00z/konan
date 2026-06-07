@@ -99,6 +99,9 @@ impl Embedder for PyCallableEmbedder {
 pub struct PySemanticChunker {
     inner: Arc<SemanticChunker<Arc<dyn Embedder>>>,
     repr: String,
+    /// Python-callable embedders need a running asyncio loop, so the sync
+    /// chunk()/chunk_many() paths must be rejected with a clear error.
+    embedder_is_py_callable: bool,
 }
 
 #[pymethods]
@@ -112,14 +115,15 @@ impl PySemanticChunker {
         min_chunk_size: usize,
         max_chunk_size: Option<usize>,
     ) -> PyResult<Self> {
-        let (port, embedder_repr): (Arc<dyn Embedder>, String) =
+        let (port, embedder_repr, embedder_is_py_callable): (Arc<dyn Embedder>, String, bool) =
             if let Ok(native) = embedder.extract::<PyOpenAIEmbedder>() {
                 let repr = native.repr.clone();
-                (Arc::clone(&native.inner) as Arc<dyn Embedder>, repr)
+                (Arc::clone(&native.inner) as Arc<dyn Embedder>, repr, false)
             } else if embedder.is_callable() {
                 (
                     Arc::new(PyCallableEmbedder { callable: embedder.unbind() }),
                     "<async callable>".to_string(),
+                    true,
                 )
             } else {
                 return Err(PyValueError::new_err(
@@ -137,14 +141,26 @@ impl PySemanticChunker {
         );
         let inner = SemanticChunker::new(port, threshold, percentile, min_chunk_size, max_chunk_size)
             .map_err(to_py_err)?;
-        Ok(Self { inner: Arc::new(inner), repr })
+        Ok(Self { inner: Arc::new(inner), repr, embedder_is_py_callable })
     }
 
     fn __repr__(&self) -> &str {
         &self.repr
     }
 
+    /// Python-callable embedders can only run inside an asyncio loop.
+    fn reject_py_callable_in_sync(&self, method: &str) -> PyResult<()> {
+        if self.embedder_is_py_callable {
+            return Err(pyo3::exceptions::PyRuntimeError::new_err(format!(
+                "SemanticChunker.{method}() does not support Python async-callable \
+                 embedders; use {method}_async() instead (or pass an OpenAIEmbedder)",
+            )));
+        }
+        Ok(())
+    }
+
     fn chunk(&self, py: Python<'_>, text: String) -> PyResult<Vec<PyChunk>> {
+        self.reject_py_callable_in_sync("chunk")?;
         let inner = Arc::clone(&self.inner);
         let chunks = py
             .allow_threads(move || {
@@ -155,6 +171,7 @@ impl PySemanticChunker {
     }
 
     fn chunk_many(&self, py: Python<'_>, texts: Vec<String>) -> PyResult<Vec<Vec<PyChunk>>> {
+        self.reject_py_callable_in_sync("chunk_many")?;
         let inner = Arc::clone(&self.inner);
         let results = py
             .allow_threads(move || {

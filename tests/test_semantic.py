@@ -86,3 +86,23 @@ def test_embedder_invalid_config():
         OpenAIEmbedder(base_url="http://x", model="m", dimensions=0)
     with pytest.raises(ValueError):
         OpenAIEmbedder(base_url="http://x", model="m", batch_size=0)
+
+
+async def test_nan_embeddings_raise_embedding_error():
+    async def embed(texts: list[str]) -> list[list[float]]:
+        return [[float("nan"), 1.0] for _ in texts]
+
+    chunker = SemanticChunker(embedder=embed)  # percentile mode
+    with pytest.raises(EmbeddingError, match="NaN"):
+        await chunker.chunk_async(TEXT)
+
+
+def test_sync_chunk_with_python_embedder_raises_helpful_error():
+    async def embed(texts: list[str]) -> list[list[float]]:
+        return [[1.0, 0.0] for _ in texts]
+
+    chunker = SemanticChunker(embedder=embed, threshold=0.5)
+    with pytest.raises(RuntimeError, match="chunk_async"):
+        chunker.chunk(TEXT)
+    with pytest.raises(RuntimeError, match="chunk_many_async"):
+        chunker.chunk_many([TEXT])

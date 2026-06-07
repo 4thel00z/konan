@@ -117,6 +117,10 @@ chunker = SemanticChunker(embedder=my_embedder, percentile=95.0)
 chunks = await chunker.chunk_async(article)   # async-only for Python embedders
 ```
 
+> Python embedders must return `list[list[float]]` — call `.tolist()` on
+> numpy arrays. They are async-only: `chunk()`/`chunk_many()` raise a
+> `RuntimeError` pointing you at the `_async` variants.
+
 ## The `Chunk` object
 
 ```python
@@ -136,7 +140,7 @@ _Coming soon — rayon goes brrr._
 ```bash
 uv sync                       # set up the venv (builds the extension)
 uv run maturin develop --uv   # rebuild after Rust changes
-cargo test -p konan-core      # rust unit tests
+cargo test --workspace        # rust unit tests
 uv run pytest -q              # python integration tests
 ```
 

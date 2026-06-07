@@ -72,13 +72,19 @@ impl<E: Embedder> SemanticChunker<E> {
         }
         let sims: Vec<f32> =
             embeddings.windows(2).map(|w| cosine_similarity(&w[0], &w[1])).collect();
+        if sims.iter().any(|s| s.is_nan()) {
+            return Err(KonanError::Embedding(
+                "embedder returned NaN values; embeddings must be finite".into(),
+            ));
+        }
         let cutoff = match self.threshold {
             Some(t) => t,
             None => {
                 let mut distances: Vec<f32> = sims.iter().map(|s| 1.0 - s).collect();
-                distances.sort_by(|a, b| a.partial_cmp(b).expect("no NaN distances"));
-                let rank = ((self.percentile / 100.0) * (distances.len() - 1) as f32).round() as usize;
-                1.0 - distances[rank]
+                distances.sort_by(|a, b| a.partial_cmp(b).expect("NaN sims rejected above"));
+                let rank = ((self.percentile / 100.0) * (distances.len() - 1) as f32).round()
+                    as usize;
+                1.0 - distances[rank.min(distances.len() - 1)]
             }
         };
 
@@ -91,18 +97,22 @@ impl<E: Embedder> SemanticChunker<E> {
             groups.last_mut().unwrap().push(sents[i + 1]);
         }
 
-        // Enforce min_chunk_size: groups still too small absorb the next group.
+        // Enforce min_chunk_size: groups still too small absorb the next group,
+        // and a trailing small group is absorbed back into its predecessor.
         if self.min_chunk_size > 0 {
+            let group_len = |g: &Vec<(usize, usize)>| map.char_len(g[0].0, g.last().unwrap().1);
             let mut merged: Vec<Vec<(usize, usize)>> = Vec::new();
             for g in groups {
-                let prev_small = merged.last().is_some_and(|p: &Vec<(usize, usize)>| {
-                    map.char_len(p[0].0, p.last().unwrap().1) < self.min_chunk_size
-                });
+                let prev_small = merged.last().is_some_and(|p| group_len(p) < self.min_chunk_size);
                 if prev_small {
                     merged.last_mut().unwrap().extend(g);
                 } else {
                     merged.push(g);
                 }
+            }
+            if merged.len() >= 2 && group_len(merged.last().unwrap()) < self.min_chunk_size {
+                let last = merged.pop().unwrap();
+                merged.last_mut().unwrap().extend(last);
             }
             groups = merged;
         }
@@ -190,5 +200,33 @@ mod tests {
         assert!(SemanticChunker::new(FakeEmbedder, Some(2.0), 95.0, 0, None).is_err());
         assert!(SemanticChunker::new(FakeEmbedder, None, 200.0, 0, None).is_err());
         assert!(SemanticChunker::new(FakeEmbedder, None, 95.0, 100, Some(50)).is_err());
+    }
+
+    struct NanEmbedder;
+
+    #[async_trait]
+    impl Embedder for NanEmbedder {
+        async fn embed(&self, texts: &[String]) -> Result<Vec<Vec<f32>>, KonanError> {
+            Ok(texts.iter().map(|_| vec![f32::NAN, 1.0]).collect())
+        }
+    }
+
+    #[tokio::test]
+    async fn nan_embeddings_error_instead_of_panic() {
+        let c = SemanticChunker::new(NanEmbedder, None, 95.0, 0, None).unwrap();
+        let err = c.chunk(TEXT).await.unwrap_err();
+        assert!(matches!(err, KonanError::Embedding(_)));
+    }
+
+    #[tokio::test]
+    async fn trailing_small_group_absorbed_into_previous() {
+        // Topic shift right before a tiny final sentence: without trailing
+        // absorption the "Quantum!" group (8 chars) stays below min_chunk_size.
+        let text = "Cats purr softly. My cat naps all day. Quantum!";
+        let c = SemanticChunker::new(FakeEmbedder, Some(0.5), 95.0, 20, None).unwrap();
+        let chunks = c.chunk(text).await.unwrap();
+        assert_eq!(chunks.len(), 1);
+        assert!(chunks[0].text.ends_with("Quantum!"));
+        crate::text::assert_char_offsets(text, &chunks);
     }
 }
