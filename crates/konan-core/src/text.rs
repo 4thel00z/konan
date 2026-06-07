@@ -61,6 +61,27 @@ pub(crate) fn sentence_spans(text: &str) -> Vec<(usize, usize)> {
         .collect()
 }
 
+/// Byte spans of sentences split on a punctuation regex like `[.!?]+\s+`.
+/// Each sentence keeps its punctuation, drops the trailing whitespace.
+pub(crate) fn regex_sentence_spans(text: &str, re: &regex::Regex) -> Vec<(usize, usize)> {
+    let mut spans = Vec::new();
+    let mut start = 0;
+    for m in re.find_iter(text) {
+        let punct_end = m.start() + m.as_str().trim_end().len();
+        if punct_end > start {
+            spans.push((start, punct_end));
+        }
+        start = m.end();
+    }
+    if start < text.len() {
+        let tail = text[start..].trim_end();
+        if !tail.is_empty() {
+            spans.push((start, start + tail.len()));
+        }
+    }
+    spans
+}
+
 /// Merge unit spans into chunk spans of at most `chunk_size` chars, carrying
 /// at most `chunk_overlap` trailing chars of units into the next chunk.
 /// A single unit larger than `chunk_size` becomes its own chunk.
