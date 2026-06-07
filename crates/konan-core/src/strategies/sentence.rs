@@ -33,9 +33,16 @@ impl Chunker for SentenceChunker {
         let mut start_idx = 0;
         while start_idx < sents.len() {
             let mut end_idx = start_idx;
-            while end_idx + 1 < sents.len()
-                && map.char_len(sents[start_idx].0, sents[end_idx + 1].1) <= self.max_chars
-            {
+            // Window char count grown incrementally: extending by one sentence
+            // adds char_len(prev_end, next_end), gap included — identical to
+            // re-measuring char_len(window_start, next_end) from scratch.
+            let mut win = map.char_len(sents[start_idx].0, sents[start_idx].1);
+            while end_idx + 1 < sents.len() {
+                let added = map.char_len(sents[end_idx].1, sents[end_idx + 1].1);
+                if win + added > self.max_chars {
+                    break;
+                }
+                win += added;
                 end_idx += 1;
             }
             spans.push((sents[start_idx].0, sents[end_idx].1));

@@ -62,6 +62,10 @@ impl Chunker for TokenChunker {
         offsets.push(pos);
 
         let map = OffsetMap::new(text);
+        // Chunk starts and ends each ascend (snapping moves boundaries by at
+        // most a few bytes), so cursors track char offsets in one pass.
+        let mut start_cur = map.cursor();
+        let mut end_cur = map.cursor();
         let step = self.chunk_size - self.chunk_overlap;
         let mut chunks = Vec::new();
         let mut i = 0;
@@ -79,8 +83,8 @@ impl Chunker for TokenChunker {
             let index = chunks.len();
             chunks.push(Chunk::new(
                 &text[start_b..end_b],
-                map.char_idx(start_b),
-                map.char_idx(end_b),
+                map.char_at(&mut start_cur, start_b),
+                map.char_at(&mut end_cur, end_b),
                 index,
             ));
             if j == tokens.len() {

@@ -85,10 +85,12 @@ impl MarkdownChunker {
         })
     }
 
+    #[allow(clippy::too_many_arguments)]
     fn flush_section(
         &self,
         text: &str,
         map: &OffsetMap,
+        cursor: &mut crate::text::CharCursor,
         section: &[(usize, usize, bool)],
         breadcrumb: &str,
         chunks: &mut Vec<Chunk>,
@@ -113,8 +115,9 @@ impl MarkdownChunker {
                 format!("{breadcrumb}\n\n{content}")
             };
             let index = chunks.len();
-            let end = map.char_idx(s) + content.chars().count();
-            chunks.push(Chunk::new(chunk_text, map.char_idx(s), end, index));
+            let start = map.char_at(cursor, s);
+            let end = start + content.chars().count();
+            chunks.push(Chunk::new(chunk_text, start, end, index));
         }
     }
 }
@@ -125,6 +128,8 @@ impl Chunker for MarkdownChunker {
             return Ok(Vec::new());
         }
         let map = OffsetMap::new(text);
+        // Merged span starts ascend across sections, so one cursor suffices.
+        let mut cursor = map.cursor();
         let mut chunks: Vec<Chunk> = Vec::new();
         let mut stack: Vec<(u32, String)> = Vec::new();
         let mut section: Vec<(usize, usize, bool)> = Vec::new();
@@ -132,7 +137,7 @@ impl Chunker for MarkdownChunker {
 
         for block in parse_blocks(text) {
             if let Some(level) = block.heading {
-                self.flush_section(text, &map, &section, &breadcrumb, &mut chunks);
+                self.flush_section(text, &map, &mut cursor, &section, &breadcrumb, &mut chunks);
                 section.clear();
                 let title = text[block.span.0..block.span.1]
                     .trim()
@@ -155,7 +160,7 @@ impl Chunker for MarkdownChunker {
                 section.push((block.span.0, block.span.1, block.is_code));
             }
         }
-        self.flush_section(text, &map, &section, &breadcrumb, &mut chunks);
+        self.flush_section(text, &map, &mut cursor, &section, &breadcrumb, &mut chunks);
         Ok(chunks)
     }
 }
