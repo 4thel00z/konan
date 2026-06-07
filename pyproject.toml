@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "konan"
-version = "0.2.3"
+version = "0.2.4"
 description = "Blazingly fast text chunkers in Rust with pythonic bindings"
 readme = "README.md"
 requires-python = ">=3.12"

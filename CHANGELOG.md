@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.2.4](https://github.com/4thel00z/konan/compare/v0.2.3...v0.2.4) (2026-06-07)
+
+
+### Bug Fixes
+
+* drop dead code left by the hot-path change ([7e0e426](https://github.com/4thel00z/konan/commit/7e0e426eef906557ed467167a84f7742368cd197))
+
+
+### Performance Improvements
+
+* **core:** ICU4X sentence segmentation + lazy memchr unit scanners ([276678d](https://github.com/4thel00z/konan/commit/276678d264037c3c890daf75dd87ba40c69d78ea))
+* **core:** stream fixed-size units lazily ([49ffe7c](https://github.com/4thel00z/konan/commit/49ffe7cb509ca47d1cd249c981c95e71f8865a0f))
+
+
+### Documentation
+
+* refresh benchmark figures after the hot-path fixes ([eadb77e](https://github.com/4thel00z/konan/commit/eadb77e1de26bb9e43911531392e329374982eb9))
+
 ## [0.2.3](https://github.com/4thel00z/konan/compare/v0.2.2...v0.2.3) (2026-06-07)
 
 
