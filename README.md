@@ -133,7 +133,53 @@ chunk.hash    # xxh3-64 content hash
 
 ## Benchmarks
 
-_Coming soon — rayon goes brrr._
+_Benchmarked on Apple M3 Pro (arm64), Python 3.12.10, konan 0.1.0. Decimal
+MB/s, median of 5 runs, measured from Python (the numbers you actually get).
+Reproduce with `uv run --extra bench benchmarks/bench.py`; Rust-level
+criterion benches: `cargo bench -p konan-core`._
+
+### Throughput per strategy (1 MB document)
+
+| Chunker | Config | Throughput | Chunks |
+|---|---|---:|---:|
+| `NaiveChunker` | 200 words | 200 MB/s | 804 |
+| `FixedSizeChunker` | 1000 chars, 200 overlap | 188 MB/s | 1255 |
+| `RecursiveChunker` | 1000 chars, 200 overlap | 72 MB/s | 1298 |
+| `SentenceChunker` | 1000 chars, 1 overlap | 53 MB/s | 1130 |
+| `MarkdownChunker` | 1000 chars, 200 overlap | 130 MB/s | 1511 |
+| `TokenChunker` | 512 tokens, 64 overlap (cl100k) | 14 MB/s | 438 |
+
+### Parallel scaling — rayon goes brrr
+
+64 docs × 256 KB through `RecursiveChunker`:
+
+| Mode | Time | Throughput | Speedup |
+|---|---:|---:|---:|
+| sequential `chunk()` loop | 207 ms | 79 MB/s | 1.0× |
+| `chunk_many()` (rayon, GIL released) | 35 ms | 473 MB/s | **6.0×** |
+
+(Pure-Rust criterion shows the same workload at 1.4 GiB/s — the Python gap
+is chunk-object conversion, which `chunk_many` amortizes across cores.)
+
+### vs other libraries (same 1 MB document)
+
+| Strategy | Library | Throughput | Chunks |
+|---|---|---:|---:|
+| recursive | **konan** | 69 MB/s | 1298 |
+| recursive | langchain-text-splitters | 26 MB/s | 1468 |
+| recursive | chonkie | 88 MB/s | 1413 |
+| token | **konan** | 14 MB/s | 438 |
+| token | langchain-text-splitters | 22 MB/s | 438 |
+| token | chonkie | 18 MB/s | 438 |
+| sentence | **konan** | 57 MB/s | 1042 |
+| sentence | chonkie | 3 MB/s | 2124 |
+
+Caveats, honestly: recursive/token use identical configs across libraries
+(1000 chars / 200 overlap; cl100k, 512 / 64). Sentence configs are not
+directly comparable (konan groups by chars, chonkie by tokens) — read those
+rows as per-library cost, not head-to-head. Token chunking is
+tokenizer-bound everywhere: konan currently uses `tiktoken-rs`, whose
+encoder trails OpenAI's `tiktoken` (used by langchain) by ~30%.
 
 ## Development
 

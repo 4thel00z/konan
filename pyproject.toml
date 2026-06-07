@@ -13,6 +13,13 @@ classifiers = [
     "Programming Language :: Python :: Implementation :: CPython",
 ]
 
+[project.optional-dependencies]
+bench = [
+    "chonkie>=1.0",
+    "langchain-text-splitters>=0.3",
+    "tiktoken>=0.7",
+]
+
 [tool.maturin]
 python-source = "python"
 module-name = "konan._konan"
