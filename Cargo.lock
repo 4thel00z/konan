@@ -1005,7 +1005,7 @@ dependencies = [
 
 [[package]]
 name = "konan-core"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-openai",
  "async-trait",
@@ -1027,7 +1027,7 @@ dependencies = [
 
 [[package]]
 name = "konan-py"
-version = "0.2.2"
+version = "0.2.3"
 dependencies = [
  "async-trait",
  "futures",
