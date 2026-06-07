@@ -149,20 +149,20 @@ Rust-level criterion benches: `cargo bench -p konan-core`._
 
 | Strategy | Library | Throughput | Chunks |
 |---|---|---:|---:|
-| recursive | **konan** | 279 MB/s | 1298 |
-| recursive | semantic-text-splitter | 190 MB/s | 1368 |
-| recursive | chonkie | 90 MB/s | 1413 |
-| recursive | langchain-text-splitters | 25 MB/s | 1468 |
-| token | **konan** | 62 MB/s | 438 |
-| token | semchunk | 25 MB/s | 616 |
-| token | langchain-text-splitters | 21 MB/s | 438 |
+| recursive | **konan** | 282 MB/s | 1298 |
+| recursive | semantic-text-splitter | 129 MB/s | 1368 |
+| recursive | chonkie | 87 MB/s | 1413 |
+| recursive | langchain-text-splitters | 24 MB/s | 1468 |
+| token | **konan** | 68 MB/s | 438 |
+| token | semchunk | 24 MB/s | 616 |
+| token | langchain-text-splitters | 23 MB/s | 438 |
 | token | chonkie | 18 MB/s | 438 |
-| token | semantic-text-splitter | 3 MB/s | 505 |
-| sentence | **konan** | 71 MB/s | 1042 |
+| token | semantic-text-splitter | 4 MB/s | 505 |
+| sentence | **konan** | 305 MB/s | 1042 |
 | sentence | chonkie | 3 MB/s | 2124 |
-| recursive (unicode) | **konan** | 170 MB/s | 1092 |
-| recursive (unicode) | semantic-text-splitter | 165 MB/s | 1150 |
-| recursive (unicode) | chonkie | 58 MB/s | 1171 |
+| recursive (unicode) | semantic-text-splitter | 167 MB/s | 1150 |
+| recursive (unicode) | **konan** | 166 MB/s | 1092 |
+| recursive (unicode) | chonkie | 57 MB/s | 1171 |
 
 ### Throughput per strategy (1 MB document)
 
@@ -172,12 +172,12 @@ Rust-level criterion benches: `cargo bench -p konan-core`._
 
 | Chunker | Config | Throughput | Chunks |
 |---|---|---:|---:|
-| `NaiveChunker` | 200 words | 549 MB/s | 804 |
-| `FixedSizeChunker` | 1000 chars, 200 overlap | 1,065 MB/s | 1255 |
-| `RecursiveChunker` | 1000 chars, 200 overlap | 273 MB/s | 1298 |
-| `SentenceChunker` | 1000 chars, 1 overlap | 71 MB/s | 1130 |
-| `MarkdownChunker` | 1000 chars, 200 overlap | 444 MB/s | 1511 |
-| `TokenChunker` | 512 tokens, 64 overlap (cl100k) | 61 MB/s | 438 |
+| `NaiveChunker` | 200 words | 553 MB/s | 804 |
+| `FixedSizeChunker` | 1000 chars, 200 overlap | 1,602 MB/s | 1255 |
+| `RecursiveChunker` | 1000 chars, 200 overlap | 282 MB/s | 1298 |
+| `SentenceChunker` | 1000 chars, 1 overlap | 306 MB/s | 1130 |
+| `MarkdownChunker` | 1000 chars, 200 overlap | 448 MB/s | 1511 |
+| `TokenChunker` | 512 tokens, 64 overlap (cl100k) | 69 MB/s | 438 |
 
 ### Parallel scaling — rayon goes brrr
 
@@ -190,7 +190,7 @@ Rust-level criterion benches: `cargo bench -p konan-core`._
 | Mode | Time | Throughput | Speedup |
 |---|---:|---:|---:|
 | sequential `chunk()` loop | 61 ms | 267 MB/s | 1.0× |
-| `chunk_many()` (rayon, GIL released) | 11 ms | 1,454 MB/s | **5.5×** |
+| `chunk_many()` (rayon, GIL released) | 10 ms | 1,568 MB/s | **5.9×** |
 
 (Pure-Rust criterion puts the same workload at ~6 GiB/s; the Python numbers
 include chunk-object conversion.)
