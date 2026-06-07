@@ -22,7 +22,7 @@
 - Rewrite: `pyproject.toml`
 - Delete: `main.py`
 
-- [ ] **Step 1: Root `Cargo.toml`**
+- [x] **Step 1: Root `Cargo.toml`**
 
 ```toml
 [workspace]
@@ -35,7 +35,7 @@ edition = "2021"
 license = "MIT"
 ```
 
-- [ ] **Step 2: `crates/konan-core/Cargo.toml`**
+- [x] **Step 2: `crates/konan-core/Cargo.toml`**
 
 ```toml
 [package]
@@ -63,13 +63,13 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 ```
 
-- [ ] **Step 3: `crates/konan-core/src/lib.rs` (placeholder)**
+- [x] **Step 3: `crates/konan-core/src/lib.rs` (placeholder)**
 
 ```rust
 //! konan-core: blazingly fast text chunking strategies.
 ```
 
-- [ ] **Step 4: `crates/konan-py/Cargo.toml`**
+- [x] **Step 4: `crates/konan-py/Cargo.toml`**
 
 ```toml
 [package]
@@ -92,7 +92,7 @@ pyo3-async-runtimes = { version = "0.25", features = ["tokio-runtime"] }
 tokio = { version = "1", features = ["rt-multi-thread"] }
 ```
 
-- [ ] **Step 5: `crates/konan-py/src/lib.rs` (stub module)**
+- [x] **Step 5: `crates/konan-py/src/lib.rs` (stub module)**
 
 ```rust
 use pyo3::prelude::*;
@@ -104,7 +104,7 @@ fn _konan(_py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 ```
 
-- [ ] **Step 6: Rewrite `pyproject.toml`**
+- [x] **Step 6: Rewrite `pyproject.toml`**
 
 ```toml
 [build-system]
@@ -140,7 +140,7 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 ```
 
-- [ ] **Step 7: `python/konan/__init__.py` (minimal)**
+- [x] **Step 7: `python/konan/__init__.py` (minimal)**
 
 ```python
 from konan._konan import __version__
@@ -148,7 +148,7 @@ from konan._konan import __version__
 __all__ = ["__version__"]
 ```
 
-- [ ] **Step 8: `.gitignore`**
+- [x] **Step 8: `.gitignore`**
 
 ```
 /target
@@ -158,16 +158,16 @@ __pycache__/
 dist/
 ```
 
-- [ ] **Step 9: Delete `main.py`**
+- [x] **Step 9: Delete `main.py`**
 
 Run: `rm main.py`
 
-- [ ] **Step 10: Verify build end-to-end**
+- [x] **Step 10: Verify build end-to-end**
 
 Run: `cargo check --workspace && uv sync && uv run maturin develop --uv && uv run python -c "import konan; print(konan.__version__)"`
 Expected: prints `0.1.0`
 
-- [ ] **Step 11: Commit**
+- [x] **Step 11: Commit**
 
 ```bash
 git add -A
@@ -182,7 +182,7 @@ git commit -m "feat: scaffold konan workspace (konan-core + konan-py, maturin)"
 - Create: `crates/konan-core/src/error.rs`, `crates/konan-core/src/chunk.rs`, `crates/konan-core/src/text.rs`
 - Modify: `crates/konan-core/src/lib.rs`
 
-- [ ] **Step 1: `error.rs`**
+- [x] **Step 1: `error.rs`**
 
 ```rust
 #[derive(Debug, thiserror::Error)]
@@ -196,7 +196,7 @@ pub enum KonanError {
 }
 ```
 
-- [ ] **Step 2: `chunk.rs`**
+- [x] **Step 2: `chunk.rs`**
 
 ```rust
 use xxhash_rust::xxh3::xxh3_64;
@@ -224,7 +224,7 @@ impl Chunk {
 }
 ```
 
-- [ ] **Step 3: `text.rs` with failing tests**
+- [x] **Step 3: `text.rs` with failing tests**
 
 ```rust
 //! Shared span helpers. All spans are byte offsets into the source;
@@ -394,7 +394,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 4: Wire up `lib.rs`**
+- [x] **Step 4: Wire up `lib.rs`**
 
 ```rust
 //! konan-core: blazingly fast text chunking strategies.
@@ -407,12 +407,12 @@ pub use chunk::Chunk;
 pub use error::KonanError;
 ```
 
-- [ ] **Step 5: Run tests**
+- [x] **Step 5: Run tests**
 
 Run: `cargo test -p konan-core`
 Expected: 5 passed
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add crates/konan-core
@@ -427,7 +427,7 @@ git commit -m "feat(core): Chunk, KonanError, span/offset utilities"
 - Create: `crates/konan-core/src/chunker.rs`
 - Modify: `crates/konan-core/src/lib.rs`
 
-- [ ] **Step 1: `chunker.rs` with test**
+- [x] **Step 1: `chunker.rs` with test**
 
 ```rust
 use crate::chunk::Chunk;
@@ -470,7 +470,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Add to `lib.rs`** (after `pub mod chunk;`)
+- [x] **Step 2: Add to `lib.rs`** (after `pub mod chunk;`)
 
 ```rust
 pub mod chunker;
@@ -480,12 +480,12 @@ and to the re-exports:
 pub use chunker::{chunk_many, Chunker};
 ```
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cargo test -p konan-core`
 Expected: all pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add crates/konan-core
@@ -500,13 +500,13 @@ git commit -m "feat(core): Chunker port and rayon chunk_many"
 - Create: `crates/konan-core/src/strategies/mod.rs`, `crates/konan-core/src/strategies/naive.rs`
 - Modify: `crates/konan-core/src/lib.rs`
 
-- [ ] **Step 1: `strategies/mod.rs`**
+- [x] **Step 1: `strategies/mod.rs`**
 
 ```rust
 pub mod naive;
 ```
 
-- [ ] **Step 2: `strategies/naive.rs` with tests**
+- [x] **Step 2: `strategies/naive.rs` with tests**
 
 ```rust
 use crate::chunk::Chunk;
@@ -580,7 +580,7 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Wire `lib.rs`**
+- [x] **Step 3: Wire `lib.rs`**
 
 ```rust
 pub mod strategies;
@@ -590,12 +590,12 @@ re-export:
 pub use strategies::naive::NaiveChunker;
 ```
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `cargo test -p konan-core`
 Expected: all pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/konan-core
@@ -610,7 +610,7 @@ git commit -m "feat(core): NaiveChunker (word-based)"
 - Create: `crates/konan-core/src/strategies/fixed_size.rs`
 - Modify: `crates/konan-core/src/strategies/mod.rs`, `crates/konan-core/src/lib.rs`, `crates/konan-core/src/text.rs`
 
-- [ ] **Step 1: Add regex sentence splitter to `text.rs`** (below `sentence_spans`)
+- [x] **Step 1: Add regex sentence splitter to `text.rs`** (below `sentence_spans`)
 
 ```rust
 /// Byte spans of sentences split on a punctuation regex like `[.!?]+\s+`.
@@ -635,7 +635,7 @@ pub(crate) fn regex_sentence_spans(text: &str, re: &regex::Regex) -> Vec<(usize,
 }
 ```
 
-- [ ] **Step 2: `strategies/fixed_size.rs` with tests**
+- [x] **Step 2: `strategies/fixed_size.rs` with tests**
 
 ```rust
 use crate::chunk::Chunk;
@@ -746,14 +746,14 @@ mod tests {
 }
 ```
 
-- [ ] **Step 3: Wire up** — `strategies/mod.rs`: add `pub mod fixed_size;`. `lib.rs` re-exports: add `pub use strategies::fixed_size::FixedSizeChunker;`
+- [x] **Step 3: Wire up** — `strategies/mod.rs`: add `pub mod fixed_size;`. `lib.rs` re-exports: add `pub use strategies::fixed_size::FixedSizeChunker;`
 
-- [ ] **Step 4: Run tests**
+- [x] **Step 4: Run tests**
 
 Run: `cargo test -p konan-core`
 Expected: all pass
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add crates/konan-core
@@ -768,7 +768,7 @@ git commit -m "feat(core): FixedSizeChunker with overlap and sentence awareness"
 - Create: `crates/konan-core/src/strategies/recursive.rs`
 - Modify: `crates/konan-core/src/strategies/mod.rs`, `crates/konan-core/src/lib.rs`
 
-- [ ] **Step 1: `strategies/recursive.rs` with tests**
+- [x] **Step 1: `strategies/recursive.rs` with tests**
 
 ```rust
 use crate::chunk::Chunk;
@@ -926,14 +926,14 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Wire up** — `strategies/mod.rs`: add `pub mod recursive;`. `lib.rs`: add `pub use strategies::recursive::RecursiveChunker;`
+- [x] **Step 2: Wire up** — `strategies/mod.rs`: add `pub mod recursive;`. `lib.rs`: add `pub use strategies::recursive::RecursiveChunker;`
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cargo test -p konan-core`
 Expected: all pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add crates/konan-core
@@ -948,7 +948,7 @@ git commit -m "feat(core): RecursiveChunker with separator hierarchy"
 - Create: `crates/konan-core/src/strategies/sentence.rs`
 - Modify: `crates/konan-core/src/strategies/mod.rs`, `crates/konan-core/src/lib.rs`
 
-- [ ] **Step 1: `strategies/sentence.rs` with tests**
+- [x] **Step 1: `strategies/sentence.rs` with tests**
 
 ```rust
 use crate::chunk::Chunk;
@@ -1039,14 +1039,14 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Wire up** — `strategies/mod.rs`: add `pub mod sentence;`. `lib.rs`: add `pub use strategies::sentence::SentenceChunker;`
+- [x] **Step 2: Wire up** — `strategies/mod.rs`: add `pub mod sentence;`. `lib.rs`: add `pub use strategies::sentence::SentenceChunker;`
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cargo test -p konan-core`
 Expected: all pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add crates/konan-core
@@ -1061,7 +1061,7 @@ git commit -m "feat(core): SentenceChunker (unicode segmentation)"
 - Create: `crates/konan-core/src/strategies/markdown.rs`
 - Modify: `crates/konan-core/src/strategies/mod.rs`, `crates/konan-core/src/lib.rs`
 
-- [ ] **Step 1: `strategies/markdown.rs` with tests**
+- [x] **Step 1: `strategies/markdown.rs` with tests**
 
 ````rust
 use crate::chunk::Chunk;
@@ -1262,14 +1262,14 @@ mod tests {
 }
 ````
 
-- [ ] **Step 2: Wire up** — `strategies/mod.rs`: add `pub mod markdown;`. `lib.rs`: add `pub use strategies::markdown::MarkdownChunker;`
+- [x] **Step 2: Wire up** — `strategies/mod.rs`: add `pub mod markdown;`. `lib.rs`: add `pub use strategies::markdown::MarkdownChunker;`
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cargo test -p konan-core`
 Expected: all pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add crates/konan-core
@@ -1284,7 +1284,7 @@ git commit -m "feat(core): MarkdownChunker with breadcrumbs and atomic code fenc
 - Create: `crates/konan-core/src/strategies/token.rs`
 - Modify: `crates/konan-core/src/strategies/mod.rs`, `crates/konan-core/src/lib.rs`
 
-- [ ] **Step 1: `strategies/token.rs` with tests**
+- [x] **Step 1: `strategies/token.rs` with tests**
 
 ```rust
 use crate::chunk::Chunk;
@@ -1422,14 +1422,14 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Wire up** — `strategies/mod.rs`: add `pub mod token;`. `lib.rs`: add `pub use strategies::token::TokenChunker;`
+- [x] **Step 2: Wire up** — `strategies/mod.rs`: add `pub mod token;`. `lib.rs`: add `pub use strategies::token::TokenChunker;`
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cargo test -p konan-core`
 Expected: all pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add crates/konan-core
@@ -1444,7 +1444,7 @@ git commit -m "feat(core): TokenChunker (tiktoken cl100k/o200k)"
 - Create: `crates/konan-core/src/embedder.rs`
 - Modify: `crates/konan-core/src/lib.rs`
 
-- [ ] **Step 1: `embedder.rs` with tests**
+- [x] **Step 1: `embedder.rs` with tests**
 
 ```rust
 use crate::error::KonanError;
@@ -1564,14 +1564,14 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Wire up `lib.rs`** — add `pub mod embedder;` and `pub use embedder::{Embedder, OpenAIEmbedder};`
+- [x] **Step 2: Wire up `lib.rs`** — add `pub mod embedder;` and `pub use embedder::{Embedder, OpenAIEmbedder};`
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cargo test -p konan-core`
 Expected: all pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add crates/konan-core
@@ -1586,7 +1586,7 @@ git commit -m "feat(core): Embedder port and OpenAI-compatible adapter"
 - Create: `crates/konan-core/src/semantic.rs`
 - Modify: `crates/konan-core/src/lib.rs`
 
-- [ ] **Step 1: `semantic.rs` with tests**
+- [x] **Step 1: `semantic.rs` with tests**
 
 ```rust
 use crate::chunk::Chunk;
@@ -1785,14 +1785,14 @@ mod tests {
 }
 ```
 
-- [ ] **Step 2: Wire up `lib.rs`** — add `pub mod semantic;` and `pub use semantic::SemanticChunker;`
+- [x] **Step 2: Wire up `lib.rs`** — add `pub mod semantic;` and `pub use semantic::SemanticChunker;`
 
-- [ ] **Step 3: Run tests**
+- [x] **Step 3: Run tests**
 
 Run: `cargo test -p konan-core`
 Expected: all pass
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add crates/konan-core
@@ -1807,7 +1807,7 @@ git commit -m "feat(core): SemanticChunker over the Embedder port"
 - Create: `crates/konan-py/src/chunk.rs`, `crates/konan-py/src/errors.rs`, `crates/konan-py/src/common.rs`, `crates/konan-py/src/chunkers.rs`
 - Modify: `crates/konan-py/src/lib.rs`
 
-- [ ] **Step 1: `errors.rs`**
+- [x] **Step 1: `errors.rs`**
 
 ```rust
 use konan_core::KonanError;
@@ -1824,7 +1824,7 @@ pub(crate) fn to_py_err(err: KonanError) -> pyo3::PyErr {
 }
 ```
 
-- [ ] **Step 2: `chunk.rs`**
+- [x] **Step 2: `chunk.rs`**
 
 ```rust
 use pyo3::prelude::*;
@@ -1886,7 +1886,7 @@ impl PyChunk {
 }
 ```
 
-- [ ] **Step 3: `common.rs` (shared sync/async method bodies)**
+- [x] **Step 3: `common.rs` (shared sync/async method bodies)**
 
 ```rust
 use std::sync::Arc;
@@ -1947,7 +1947,7 @@ pub(crate) fn do_chunk_many_async<'p>(
 }
 ```
 
-- [ ] **Step 4: `chunkers.rs` (six classes; methods are identical one-line delegations)**
+- [x] **Step 4: `chunkers.rs` (six classes; methods are identical one-line delegations)**
 
 ```rust
 use std::sync::Arc;
@@ -2136,7 +2136,7 @@ impl PyTokenChunker {
 }
 ```
 
-- [ ] **Step 5: Update `lib.rs`**
+- [x] **Step 5: Update `lib.rs`**
 
 ```rust
 use pyo3::prelude::*;
@@ -2161,12 +2161,12 @@ fn _konan(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
 }
 ```
 
-- [ ] **Step 6: Build & smoke-test**
+- [x] **Step 6: Build & smoke-test**
 
 Run: `uv run maturin develop --uv && uv run python -c "from konan._konan import RecursiveChunker; print(RecursiveChunker(chunk_size=10, chunk_overlap=0).chunk('hello world again'))"`
 Expected: prints a list of Chunk reprs
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add crates/konan-py
@@ -2181,7 +2181,7 @@ git commit -m "feat(py): bind six chunkers with sync, parallel and async methods
 - Create: `crates/konan-py/src/semantic.rs`
 - Modify: `crates/konan-py/src/lib.rs`
 
-- [ ] **Step 1: `semantic.rs`**
+- [x] **Step 1: `semantic.rs`**
 
 ```rust
 use std::sync::Arc;
@@ -2325,19 +2325,19 @@ impl PySemanticChunker {
 }
 ```
 
-- [ ] **Step 2: Wire `lib.rs`** — add `mod semantic;` and in `_konan`:
+- [x] **Step 2: Wire `lib.rs`** — add `mod semantic;` and in `_konan`:
 
 ```rust
     m.add_class::<semantic::PyOpenAIEmbedder>()?;
     m.add_class::<semantic::PySemanticChunker>()?;
 ```
 
-- [ ] **Step 3: Build**
+- [x] **Step 3: Build**
 
 Run: `uv run maturin develop --uv`
 Expected: builds clean
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add crates/konan-py
@@ -2352,7 +2352,7 @@ git commit -m "feat(py): SemanticChunker, OpenAIEmbedder, Python-callable embedd
 - Modify: `python/konan/__init__.py`
 - Create: `python/konan/py.typed`, `python/konan/_konan.pyi`
 
-- [ ] **Step 1: `python/konan/__init__.py`**
+- [x] **Step 1: `python/konan/__init__.py`**
 
 ```python
 """konan — blazingly fast text chunkers, forged in Rust."""
@@ -2386,9 +2386,9 @@ __all__ = [
 ]
 ```
 
-- [ ] **Step 2: `python/konan/py.typed`** — empty file.
+- [x] **Step 2: `python/konan/py.typed`** — empty file.
 
-- [ ] **Step 3: `python/konan/_konan.pyi`**
+- [x] **Step 3: `python/konan/_konan.pyi`**
 
 ```python
 from collections.abc import Awaitable, Callable, Sequence
@@ -2496,12 +2496,12 @@ class SemanticChunker:
     async def chunk_many_async(self, texts: Sequence[str]) -> list[list[Chunk]]: ...
 ```
 
-- [ ] **Step 4: Rebuild & verify imports**
+- [x] **Step 4: Rebuild & verify imports**
 
 Run: `uv run maturin develop --uv && uv run python -c "import konan; print(sorted(konan.__all__))"`
 Expected: lists all 10 exports + `__version__`
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add python
@@ -2515,7 +2515,7 @@ git commit -m "feat(py): package surface with typed stubs and py.typed"
 **Files:**
 - Create: `tests/conftest.py`, `tests/test_chunkers.py`, `tests/test_async.py`, `tests/test_semantic.py`
 
-- [ ] **Step 1: `tests/conftest.py` (mock OpenAI-compatible endpoint)**
+- [x] **Step 1: `tests/conftest.py` (mock OpenAI-compatible endpoint)**
 
 ```python
 import json
@@ -2560,7 +2560,7 @@ def embeddings_url():
     server.shutdown()
 ```
 
-- [ ] **Step 2: `tests/test_chunkers.py`**
+- [x] **Step 2: `tests/test_chunkers.py`**
 
 ````python
 import pytest
@@ -2657,7 +2657,7 @@ def test_markdown_code_fence_never_split():
     assert code and "pip install konan" in code[0].text
 ````
 
-- [ ] **Step 3: `tests/test_async.py`**
+- [x] **Step 3: `tests/test_async.py`**
 
 ```python
 import asyncio
@@ -2692,7 +2692,7 @@ async def test_async_methods_run_concurrently():
     assert results[1] == c.chunk_many([PROSE, PROSE * 2])
 ```
 
-- [ ] **Step 4: `tests/test_semantic.py`**
+- [x] **Step 4: `tests/test_semantic.py`**
 
 ```python
 import pytest
@@ -2753,12 +2753,12 @@ def test_rejects_non_embedder():
         SemanticChunker(embedder=42)
 ```
 
-- [ ] **Step 5: Run the suite**
+- [x] **Step 5: Run the suite**
 
 Run: `uv run maturin develop --uv && uv run pytest -q`
 Expected: all tests pass
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add tests
@@ -2772,7 +2772,7 @@ git commit -m "test(py): integration tests for sync, parallel, async and semanti
 **Files:**
 - Rewrite: `README.md`
 
-- [ ] **Step 1: Write `README.md`**
+- [x] **Step 1: Write `README.md`**
 
 `````markdown
 <p align="center">
@@ -2926,7 +2926,7 @@ MIT
 <p align="center"><sub>Named after Konan of the Akatsuki — the only one who could fold paper into anything. 🗞️</sub></p>
 `````
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add README.md
@@ -2937,12 +2937,12 @@ git commit -m "docs: modern README with logo, strategy table and examples"
 
 ### Task 17: Final verification
 
-- [ ] **Step 1: Full check**
+- [x] **Step 1: Full check**
 
 Run: `cargo test --workspace && uv run maturin develop --uv && uv run pytest -q`
 Expected: everything green
 
-- [ ] **Step 2: Stub/API drift check**
+- [x] **Step 2: Stub/API drift check**
 
 Run: `uv run python - <<'EOF'
 import inspect, konan
@@ -2955,7 +2955,7 @@ print("API surface OK")
 EOF`
 Expected: `API surface OK`
 
-- [ ] **Step 3: Commit any stragglers**
+- [x] **Step 3: Commit any stragglers**
 
 ```bash
 git add -A
