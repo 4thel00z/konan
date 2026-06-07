@@ -5,7 +5,7 @@
 <h1 align="center">konan</h1>
 
 <p align="center">
-  <em>Like the paper angel of the Akatsuki, konan folds your documents into perfect pieces — blazingly fast chunkers written in Rust, wrapped for pythonic bliss.</em>
+  <em>Like the paper angel of the Akatsuki, konan folds your documents into precise pieces — Rust chunkers behind a Python API.</em>
 </p>
 
 <p align="center">
@@ -22,8 +22,8 @@
 ## Why konan?
 
 - 🦀 **Rust core** — all chunking runs in native code, no Python-loop overhead
-- ⚡ **Multithreaded out of the box** — `chunk_many()` fans out across all cores via rayon and releases the GIL
-- 🌀 **First-class async** — every chunker ships real `async def` flavours (`chunk_async`, `chunk_many_async`)
+- ⚡ **Multithreaded by default** — `chunk_many()` fans out across all cores via rayon and releases the GIL
+- 🌀 **Real async** — `chunk_async` / `chunk_many_async` are native `async def`, not thread-pool wrappers
 - 🎯 **Char-accurate offsets** — `text[chunk.start:chunk.end] == chunk.text`, always (Python slicing semantics, emoji-safe)
 - 🧠 **Semantic chunking** — splits on topic shifts using any OpenAI-compatible embeddings endpoint, or your own async embedder
 - 🔌 **Ports & adapters** — the `Embedder` port is injectable; bring your own backend
@@ -57,7 +57,7 @@ chunks = chunker.chunk(open("moby_dick.txt").read())
 print(chunks[0].text, chunks[0].start, chunks[0].end, chunks[0].hash)
 ```
 
-### Parallel — all cores, zero setup
+### Parallel — all cores, one call
 
 ```python
 # rayon work-stealing across every core, GIL released:
@@ -137,8 +137,8 @@ chunk.hash    # xxh3-64 content hash
 ## Benchmarks
 
 _Benchmarked on Apple M3 Pro (arm64), Python 3.12.10. Decimal MB/s, median
-of 5 runs, measured from Python (the numbers you actually get). Reproduce —
-tables and plots — with `uv run --extra bench benchmarks/bench.py`;
+of 5 runs, measured from Python (the numbers you actually get). Reproduce
+both tables and plots with `uv run --extra bench benchmarks/bench.py`;
 Rust-level criterion benches: `cargo bench -p konan-core`._
 
 ### vs other libraries (same 1 MB document, identical configs)
