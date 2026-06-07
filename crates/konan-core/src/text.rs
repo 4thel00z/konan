@@ -46,11 +46,6 @@ impl<'a> OffsetMap<'a> {
         CharCursor { byte: 0, ch: 0 }
     }
 
-    /// Whether the source text is pure ASCII (byte == char offsets).
-    pub fn is_ascii(&self) -> bool {
-        self.ascii
-    }
-
     /// Char index of `byte` (a char boundary), advancing the cursor. Small
     /// backward jumps (e.g. token-boundary snapping) are tolerated and cost
     /// only the distance moved.
@@ -112,6 +107,9 @@ pub(crate) fn sentence_spans(text: &str) -> Vec<(usize, usize)> {
 
 /// Byte spans of sentences split on a punctuation regex like `[.!?]+\s+`.
 /// Each sentence keeps its punctuation, drops the trailing whitespace.
+/// Test-only since [`SentenceUnits`] took over the hot path: it remains the
+/// oracle for the fixed-size equivalence matrix.
+#[cfg(test)]
 pub(crate) fn regex_sentence_spans(text: &str, re: &regex::Regex) -> Vec<(usize, usize)> {
     let mut spans = Vec::new();
     let mut start = 0;

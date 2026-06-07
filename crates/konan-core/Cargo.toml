@@ -15,7 +15,6 @@ icu_segmenter = { version = "2.2.0", default-features = false, features = ["comp
 memchr = "2.8.1"
 pulldown-cmark = { version = "0.13", default-features = false }
 rayon = "1.10"
-regex = "1"
 reqwest = { version = "0.13", default-features = false }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
@@ -24,6 +23,8 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 
 [dev-dependencies]
 criterion = "0.8"
+# Only the fixed-size equivalence oracle still needs the regex engine.
+regex = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [[bench]]
