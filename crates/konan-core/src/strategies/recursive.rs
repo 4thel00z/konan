@@ -74,19 +74,21 @@ impl RecursiveChunker {
             return;
         }
         let slice = &text[span.0..span.1];
-        if !slice.contains(sep.as_str()) {
-            self.split_units(text, map, span, sep_idx + 1, out);
-            return;
-        }
         let mut piece_start = span.0;
         let mut search_from = 0;
+        let mut found = false;
         while let Some(pos) = slice[search_from..].find(sep.as_str()) {
+            found = true;
             let sep_end = span.0 + search_from + pos + sep.len();
             if sep_end > piece_start {
                 self.split_units(text, map, (piece_start, sep_end), sep_idx + 1, out);
             }
             piece_start = sep_end;
             search_from = search_from + pos + sep.len();
+        }
+        if !found {
+            self.split_units(text, map, span, sep_idx + 1, out);
+            return;
         }
         if piece_start < span.1 {
             self.split_units(text, map, (piece_start, span.1), sep_idx + 1, out);
