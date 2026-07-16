@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.0](https://github.com/4thel00z/konan/compare/v0.2.4...v0.3.0) (2026-07-16)
+
+
+### Performance Improvements
+
+* **core:** drop redundant contains+find scan in RecursiveChunker ([d85d851](https://github.com/4thel00z/konan/commit/d85d851188a9ffc5747c0631f2e0369ecf4773da))
+
 ## [0.2.4](https://github.com/4thel00z/konan/compare/v0.2.3...v0.2.4) (2026-06-07)
 
 
