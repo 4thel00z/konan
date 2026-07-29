@@ -441,15 +441,17 @@ def make_plots(
     written.append(path)
 
     # --- 3. parallel scaling ---------------------------------------------
-    fig, ax = plt.subplots(figsize=(8, 1.9))
+    # Taller than the bars need: the title wraps to two lines, because on one
+    # line it ran off the right edge of the figure.
+    fig, ax = plt.subplots(figsize=(8, 2.2))
     modes = ["chunk_many() — rayon", "sequential chunk() loop"]
     pvals = [parallel["par_mbps"], parallel["seq_mbps"]]
     bars = ax.barh(modes, pvals, color=[KONAN_COLOR, OTHER_COLOR], height=0.58)
     bar_labels(ax, bars, pvals)
     style(
         ax,
-        f"chunk_many parallel scaling — {parallel['speedup']:.1f}× "
-        "(64 × 256 KB docs, RecursiveChunker, MB/s)",
+        f"chunk_many parallel scaling — {parallel['speedup']:.1f}×\n"
+        "64 × 256 KB docs, RecursiveChunker, MB/s",
     )
     ax.set_xlim(0, max(pvals) * 1.22)
     fig.tight_layout()
