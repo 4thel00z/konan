@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.4.0](https://github.com/4thel00z/konan/compare/v0.3.0...v0.4.0) (2026-07-29)
+
+
+### ⚠ BREAKING CHANGES
+
+* **core:** Chunk::text is now the method text(), Chunk::hash is a u64 with hash_hex() for the string form, and Chunker implementors provide chunk_shared(&Arc<str>) instead of chunk(&str), which remains available as a defaulted method. Holding one chunk now keeps its whole source alive; clone text() if you need to drop the rest. The Python API is unchanged: chunk.hash still returns the same 16-digit hex string and JSON serialisation is byte-identical. chunk.hash_int is added for callers who would only parse the hex back into an integer.
+
+### Performance Improvements
+
+* **core:** SWAR scanning, shared-source chunks, parallel BPE and segmentation ([d2bc5de](https://github.com/4thel00z/konan/commit/d2bc5debb54056f2f7adfecba2289427f9297185))
+
+
+### Documentation
+
+* **bench:** regenerate benchmarks for the SWAR/arena work ([667371b](https://github.com/4thel00z/konan/commit/667371b87fc07178c5abd1226ea3d6c1ec3493b1))
+
 ## [0.3.0](https://github.com/4thel00z/konan/compare/v0.2.4...v0.3.0) (2026-07-16)
 
 
