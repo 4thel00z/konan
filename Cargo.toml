@@ -2,6 +2,20 @@
 resolver = "2"
 members = ["crates/konan-core", "crates/konan-py"]
 
+[profile.release]
+# Cross-crate inlining is worth 1.02x-1.40x here, measured by alternating whole
+# binaries and taking per-benchmark minimums (the token chunker gains most, since
+# the BPE hot loop lives in bpe-openai). Criterion's cross-run deltas are useless
+# for this on a throttling laptop — they reported LTO as a 25% regression.
+lto = "fat"
+codegen-units = 1
+# Deliberately NOT panic = "abort": PyO3 converts panics into Python exceptions
+# by unwinding, so aborting would take the interpreter down with it.
+
+[profile.bench]
+lto = "fat"
+codegen-units = 1
+
 [workspace.package]
 version = "0.3.0" # x-release-please-version
 edition = "2021"

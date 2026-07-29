@@ -12,8 +12,11 @@ pub(crate) fn do_chunk(
     chunker: Arc<dyn Chunker>,
     text: String,
 ) -> PyResult<Vec<PyChunk>> {
+    // Share the source once so the chunks borrow it rather than each copying
+    // their slice out of it.
+    let src: Arc<str> = Arc::from(text);
     let chunks = py
-        .allow_threads(move || chunker.chunk(&text))
+        .allow_threads(move || chunker.chunk_shared(&src))
         .map_err(to_py_err)?;
     Ok(chunks.into_iter().map(PyChunk::from).collect())
 }
@@ -38,7 +41,8 @@ pub(crate) fn do_chunk_async<'p>(
     text: String,
 ) -> PyResult<Bound<'p, PyAny>> {
     pyo3_async_runtimes::tokio::future_into_py(py, async move {
-        let chunks = tokio::task::spawn_blocking(move || chunker.chunk(&text))
+        let src: Arc<str> = Arc::from(text);
+        let chunks = tokio::task::spawn_blocking(move || chunker.chunk_shared(&src))
             .await
             .map_err(|e| PyRuntimeError::new_err(e.to_string()))?
             .map_err(to_py_err)?;

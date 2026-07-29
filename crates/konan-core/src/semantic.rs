@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::chunk::Chunk;
 use crate::embedder::Embedder;
 use crate::error::KonanError;
@@ -62,13 +64,20 @@ impl<E: Embedder> SemanticChunker<E> {
     }
 
     pub async fn chunk(&self, text: &str) -> Result<Vec<Chunk>, KonanError> {
+        self.chunk_shared(&Arc::from(text)).await
+    }
+
+    /// [`Self::chunk`] over an already-shared source, letting the returned
+    /// chunks borrow it instead of copying their text out.
+    pub async fn chunk_shared(&self, src: &Arc<str>) -> Result<Vec<Chunk>, KonanError> {
+        let text: &str = src;
         if text.trim().is_empty() {
             return Ok(Vec::new());
         }
         let map = OffsetMap::new(text);
         let sents = sentence_spans(text);
         if sents.len() <= 1 {
-            return Ok(spans_to_chunks(text, &map, &sents));
+            return Ok(spans_to_chunks(src, &map, &sents));
         }
         let sentence_texts: Vec<String> =
             sents.iter().map(|&(s, e)| text[s..e].to_string()).collect();
@@ -151,7 +160,7 @@ impl<E: Embedder> SemanticChunker<E> {
             .filter(|g| !g.is_empty())
             .map(|g| (g[0].0, g.last().unwrap().1))
             .collect();
-        Ok(spans_to_chunks(text, &map, &spans))
+        Ok(spans_to_chunks(src, &map, &spans))
     }
 
     pub async fn chunk_many(&self, texts: &[String]) -> Result<Vec<Vec<Chunk>>, KonanError> {
@@ -189,8 +198,8 @@ mod tests {
         let c = SemanticChunker::new(FakeEmbedder, Some(0.5), 95.0, 0, None).unwrap();
         let chunks = c.chunk(TEXT).await.unwrap();
         assert_eq!(chunks.len(), 2);
-        assert!(chunks[0].text.contains("cat naps"));
-        assert!(chunks[1].text.starts_with("Quantum"));
+        assert!(chunks[0].text().contains("cat naps"));
+        assert!(chunks[1].text().starts_with("Quantum"));
         crate::text::assert_char_offsets(TEXT, &chunks);
     }
 
@@ -246,7 +255,7 @@ mod tests {
         let c = SemanticChunker::new(FakeEmbedder, Some(0.5), 95.0, 20, None).unwrap();
         let chunks = c.chunk(text).await.unwrap();
         assert_eq!(chunks.len(), 1);
-        assert!(chunks[0].text.ends_with("Quantum!"));
+        assert!(chunks[0].text().ends_with("Quantum!"));
         crate::text::assert_char_offsets(text, &chunks);
     }
 }

@@ -25,6 +25,8 @@ xxhash-rust = { version = "0.8", features = ["xxh3"] }
 criterion = "0.8"
 # Only the fixed-size equivalence oracle still needs the regex engine.
 regex = "1"
+# Pins Chunk's serialised shape, which must not drift with the arena layout.
+serde_json = "1"
 tokio = { version = "1", features = ["rt-multi-thread", "macros"] }
 
 [[bench]]

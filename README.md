@@ -127,11 +127,12 @@ chunks = await chunker.chunk_async(article)   # async-only for Python embedders
 ## The `Chunk` object
 
 ```python
-chunk.text    # the chunk's text
-chunk.start   # char offset into the source (Python slicing semantics)
-chunk.end     # char offset, exclusive
-chunk.index   # 0-based position
-chunk.hash    # xxh3-64 content hash
+chunk.text      # the chunk's text
+chunk.start     # char offset into the source (Python slicing semantics)
+chunk.end       # char offset, exclusive
+chunk.index     # 0-based position
+chunk.hash      # xxh3-64 content hash, as 16 hex digits
+chunk.hash_int  # the same digest as an int, if you'd only parse the hex back
 ```
 
 ## Benchmarks

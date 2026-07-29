@@ -1,3 +1,6 @@
+use std::fmt::Write as _;
+use std::sync::Arc;
+
 use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
@@ -88,7 +91,7 @@ impl MarkdownChunker {
     #[allow(clippy::too_many_arguments)]
     fn flush_section(
         &self,
-        text: &str,
+        src: &Arc<str>,
         map: &OffsetMap,
         cursor: &mut crate::text::CharCursor,
         section: &[(usize, usize, bool)],
@@ -98,6 +101,7 @@ impl MarkdownChunker {
         if section.is_empty() {
             return;
         }
+        let text: &str = src;
         // Oversized non-code blocks get recursively split; code blocks stay atomic.
         let mut units: Vec<(usize, usize)> = Vec::new();
         for &(s, e, is_code) in section {
@@ -109,21 +113,28 @@ impl MarkdownChunker {
         }
         for (s, e) in merge_spans(map, &units, self.chunk_size, self.chunk_overlap) {
             let content = text[s..e].trim_end();
-            let chunk_text = if breadcrumb.is_empty() {
-                content.to_string()
-            } else {
-                format!("{breadcrumb}\n\n{content}")
-            };
+            let content_end = s + content.len();
             let index = chunks.len();
             let start = map.char_at(cursor, s);
-            let end = start + content.chars().count();
-            chunks.push(Chunk::new(chunk_text, start, end, index));
+            // char_len takes the ASCII fast path; chars().count() never could.
+            let end = start + map.char_len(s, content_end);
+            if breadcrumb.is_empty() {
+                // Verbatim source, so the chunk can borrow instead of copying.
+                chunks.push(Chunk::shared(src, s, content_end, start, end, index));
+            } else {
+                let mut chunk_text = String::with_capacity(breadcrumb.len() + 2 + content.len());
+                chunk_text.push_str(breadcrumb);
+                chunk_text.push_str("\n\n");
+                chunk_text.push_str(content);
+                chunks.push(Chunk::new(chunk_text, start, end, index));
+            }
         }
     }
 }
 
 impl Chunker for MarkdownChunker {
-    fn chunk(&self, text: &str) -> Result<Vec<Chunk>, KonanError> {
+    fn chunk_shared(&self, src: &Arc<str>) -> Result<Vec<Chunk>, KonanError> {
+        let text: &str = src;
         if text.trim().is_empty() {
             return Ok(Vec::new());
         }
@@ -131,13 +142,15 @@ impl Chunker for MarkdownChunker {
         // Merged span starts ascend across sections, so one cursor suffices.
         let mut cursor = map.cursor();
         let mut chunks: Vec<Chunk> = Vec::new();
-        let mut stack: Vec<(u32, String)> = Vec::new();
+        // Heading stack, each entry recording where its segment starts in
+        // `breadcrumb` so popping a level is a truncate rather than a rebuild.
+        let mut stack: Vec<(u32, usize)> = Vec::new();
         let mut section: Vec<(usize, usize, bool)> = Vec::new();
         let mut breadcrumb = String::new();
 
         for block in parse_blocks(text) {
             if let Some(level) = block.heading {
-                self.flush_section(text, &map, &mut cursor, &section, &breadcrumb, &mut chunks);
+                self.flush_section(src, &map, &mut cursor, &section, &breadcrumb, &mut chunks);
                 section.clear();
                 let title = text[block.span.0..block.span.1]
                     .trim()
@@ -145,22 +158,31 @@ impl Chunker for MarkdownChunker {
                     .next()
                     .unwrap_or_default()
                     .trim_start_matches('#')
-                    .trim()
-                    .to_string();
-                while stack.last().is_some_and(|(l, _)| *l >= level) {
+                    .trim();
+                // Drop sibling and deeper headings, then append this one. The
+                // breadcrumb is grown in place instead of being re-joined from a
+                // Vec<String> at every heading.
+                while let Some(&(l, at)) = stack.last() {
+                    if l < level {
+                        break;
+                    }
+                    breadcrumb.truncate(at);
                     stack.pop();
                 }
-                stack.push((level, title));
-                breadcrumb = stack
-                    .iter()
-                    .map(|(l, t)| format!("{} {}", "#".repeat(*l as usize), t))
-                    .collect::<Vec<_>>()
-                    .join(" > ");
+                let at = breadcrumb.len();
+                if at > 0 {
+                    breadcrumb.push_str(" > ");
+                }
+                for _ in 0..level {
+                    breadcrumb.push('#');
+                }
+                let _ = write!(breadcrumb, " {title}");
+                stack.push((level, at));
             } else {
                 section.push((block.span.0, block.span.1, block.is_code));
             }
         }
-        self.flush_section(text, &map, &mut cursor, &section, &breadcrumb, &mut chunks);
+        self.flush_section(src, &map, &mut cursor, &section, &breadcrumb, &mut chunks);
         Ok(chunks)
     }
 }
@@ -178,12 +200,12 @@ mod tests {
     #[test]
     fn breadcrumbs_prefix_chunks() {
         let chunks = MarkdownChunker::new(200, 0).unwrap().chunk(MD).unwrap();
-        assert!(chunks[0].text.starts_with("# Guide\n\nIntro paragraph"));
+        assert!(chunks[0].text().starts_with("# Guide\n\nIntro paragraph"));
         assert!(chunks
             .iter()
-            .any(|c| c.text.starts_with("# Guide > ## Install")));
+            .any(|c| c.text().starts_with("# Guide > ## Install")));
         for c in &chunks {
-            assert!(c.text.ends_with(&source_slice(MD, c)));
+            assert!(c.text().ends_with(&source_slice(MD, c)));
         }
     }
 
@@ -192,10 +214,10 @@ mod tests {
         let chunks = MarkdownChunker::new(10, 0).unwrap().chunk(MD).unwrap();
         let code: Vec<_> = chunks
             .iter()
-            .filter(|c| c.text.contains("```bash"))
+            .filter(|c| c.text().contains("```bash"))
             .collect();
         assert_eq!(code.len(), 1);
-        assert!(code[0].text.contains("pip install konan"));
+        assert!(code[0].text().contains("pip install konan"));
     }
 
     #[test]
@@ -203,16 +225,16 @@ mod tests {
         let text = "Just a paragraph.\n\nAnother paragraph.";
         let chunks = MarkdownChunker::new(200, 0).unwrap().chunk(text).unwrap();
         assert_eq!(chunks.len(), 1);
-        assert!(chunks[0].text.starts_with("Just a paragraph."));
+        assert!(chunks[0].text().starts_with("Just a paragraph."));
     }
 
     #[test]
     fn sibling_heading_replaces_breadcrumb() {
         let md = "## A\n\none\n\n## B\n\ntwo\n";
         let chunks = MarkdownChunker::new(200, 0).unwrap().chunk(md).unwrap();
-        assert!(chunks[0].text.starts_with("## A"));
-        assert!(chunks[1].text.starts_with("## B"));
-        assert!(!chunks[1].text.contains("## A"));
+        assert!(chunks[0].text().starts_with("## A"));
+        assert!(chunks[1].text().starts_with("## B"));
+        assert!(!chunks[1].text().contains("## A"));
     }
 
     #[test]
@@ -221,28 +243,28 @@ mod tests {
         let chunks = MarkdownChunker::new(200, 0).unwrap().chunk(md).unwrap();
         // No chunk should have an underline leaked into its breadcrumb
         assert!(
-            !chunks.iter().any(|c| c.text.contains("=====")),
+            !chunks.iter().any(|c| c.text().contains("=====")),
             "underline leaked into breadcrumb"
         );
         assert!(
-            !chunks.iter().any(|c| c.text.contains("---\n")),
+            !chunks.iter().any(|c| c.text().contains("---\n")),
             "setext underline leaked into breadcrumb"
         );
         // The H1 section chunk must start with the clean breadcrumb
         assert!(
-            chunks[0].text.starts_with("# Title\n\n"),
+            chunks[0].text().starts_with("# Title\n\n"),
             "got: {:?}",
-            chunks[0].text
+            chunks[0].text()
         );
         // The H2 section chunk must contain the nested breadcrumb without any underlines
         let sub_chunk = chunks
             .iter()
-            .find(|c| c.text.contains("## Sub"))
+            .find(|c| c.text().contains("## Sub"))
             .expect("no Sub chunk");
         assert!(
-            sub_chunk.text.starts_with("# Title > ## Sub\n\n"),
+            sub_chunk.text().starts_with("# Title > ## Sub\n\n"),
             "got: {:?}",
-            sub_chunk.text
+            sub_chunk.text()
         );
     }
 }

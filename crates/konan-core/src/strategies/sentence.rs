@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
@@ -23,7 +25,8 @@ impl SentenceChunker {
 }
 
 impl Chunker for SentenceChunker {
-    fn chunk(&self, text: &str) -> Result<Vec<Chunk>, KonanError> {
+    fn chunk_shared(&self, src: &Arc<str>) -> Result<Vec<Chunk>, KonanError> {
+        let text: &str = src;
         if text.trim().is_empty() {
             return Ok(Vec::new());
         }
@@ -55,7 +58,7 @@ impl Chunker for SentenceChunker {
             }
             start_idx = next_start;
         }
-        Ok(spans_to_chunks(text, &map, &spans))
+        Ok(spans_to_chunks(src, &map, &spans))
     }
 }
 
@@ -72,8 +75,8 @@ mod tests {
         let chunks = SentenceChunker::new(45, 0).unwrap().chunk(TEXT).unwrap();
         assert!(chunks.len() >= 2);
         for c in &chunks {
-            assert!(c.text.starts_with("Sentence"));
-            assert!(c.text.ends_with('.'));
+            assert!(c.text().starts_with("Sentence"));
+            assert!(c.text().ends_with('.'));
         }
         assert_char_offsets(TEXT, &chunks);
     }
@@ -91,7 +94,7 @@ mod tests {
     fn oversized_sentence_emitted_alone() {
         let text = "Short. This single sentence is much longer than the limit allows. End.";
         let chunks = SentenceChunker::new(20, 0).unwrap().chunk(text).unwrap();
-        assert!(chunks.iter().any(|c| c.text.contains("much longer")));
+        assert!(chunks.iter().any(|c| c.text().contains("much longer")));
         assert_char_offsets(text, &chunks);
     }
 }

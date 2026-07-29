@@ -1,9 +1,21 @@
+use std::sync::Arc;
+
 use crate::chunk::Chunk;
 use crate::error::KonanError;
 
 /// Port: a text chunking strategy.
 pub trait Chunker: Send + Sync {
-    fn chunk(&self, text: &str) -> Result<Vec<Chunk>, KonanError>;
+    /// Chunk a source that is already reference-counted. The returned chunks
+    /// borrow `src` rather than copying their text out of it, so this is the
+    /// allocation-free entry point.
+    fn chunk_shared(&self, src: &Arc<str>) -> Result<Vec<Chunk>, KonanError>;
+
+    /// Chunk `text`, copying it once into a shared buffer that the returned
+    /// chunks borrow. Prefer [`Chunker::chunk_shared`] when you already hold an
+    /// `Arc<str>`, which avoids that copy.
+    fn chunk(&self, text: &str) -> Result<Vec<Chunk>, KonanError> {
+        self.chunk_shared(&Arc::from(text))
+    }
 }
 
 /// Chunk many texts in parallel with rayon.
@@ -24,8 +36,8 @@ mod tests {
 
     struct Echo;
     impl Chunker for Echo {
-        fn chunk(&self, text: &str) -> Result<Vec<Chunk>, KonanError> {
-            Ok(vec![Chunk::new(text, 0, text.chars().count(), 0)])
+        fn chunk_shared(&self, src: &Arc<str>) -> Result<Vec<Chunk>, KonanError> {
+            Ok(vec![Chunk::new(&**src, 0, src.chars().count(), 0)])
         }
     }
 
@@ -35,7 +47,7 @@ mod tests {
         let out = chunk_many(&Echo, &texts).unwrap();
         assert_eq!(out.len(), 64);
         for (i, chunks) in out.iter().enumerate() {
-            assert_eq!(chunks[0].text, format!("text-{i}"));
+            assert_eq!(chunks[0].text(), format!("text-{i}"));
         }
     }
 }

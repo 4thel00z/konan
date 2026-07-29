@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
@@ -40,13 +42,14 @@ impl FixedSizeChunker {
 }
 
 impl Chunker for FixedSizeChunker {
-    fn chunk(&self, text: &str) -> Result<Vec<Chunk>, KonanError> {
+    fn chunk_shared(&self, src: &Arc<str>) -> Result<Vec<Chunk>, KonanError> {
+        let text: &str = src;
         if text.trim().is_empty() {
             return Ok(Vec::new());
         }
         let map = OffsetMap::new(text);
         if map.char_len(0, text.len()) <= self.chunk_size {
-            return Ok(spans_to_chunks(text, &map, &[(0, text.len())]));
+            return Ok(spans_to_chunks(src, &map, &[(0, text.len())]));
         }
         // Sentence mode applies when at least two sentence units exist
         // (the legacy `spans.len() > 1` check), probed lazily.
@@ -74,7 +77,7 @@ impl Chunker for FixedSizeChunker {
                 self.chunk_overlap,
             )
         };
-        Ok(spans_to_chunks(text, &map, &merged))
+        Ok(spans_to_chunks(src, &map, &merged))
     }
 }
 
@@ -98,9 +101,10 @@ mod tests {
         if text.trim().is_empty() {
             return Vec::new();
         }
+        let src: Arc<str> = Arc::from(text);
         let map = OffsetMap::new(text);
         if map.char_len(0, text.len()) <= chunk_size {
-            return spans_to_chunks(text, &map, &[(0, text.len())]);
+            return spans_to_chunks(&src, &map, &[(0, text.len())]);
         }
         let units = if respect_sentences {
             let sents = regex_sentence_spans(text, &sentence_re);
@@ -113,7 +117,7 @@ mod tests {
             word_spans(text)
         };
         let merged = merge_spans(&map, &units, chunk_size, chunk_overlap);
-        spans_to_chunks(text, &map, &merged)
+        spans_to_chunks(&src, &map, &merged)
     }
 
     fn assert_equivalent(text: &str, chunk_size: usize, chunk_overlap: usize, respect: bool) {
@@ -183,9 +187,9 @@ mod tests {
         assert!(chunks.len() >= 2);
         for c in &chunks {
             assert!(
-                c.text.ends_with(['.', '!', '?']),
+                c.text().ends_with(['.', '!', '?']),
                 "broke mid-sentence: {:?}",
-                c.text
+                c.text()
             );
         }
         assert_char_offsets(TEXT, &chunks);
@@ -209,7 +213,7 @@ mod tests {
             .chunk("tiny")
             .unwrap();
         assert_eq!(chunks.len(), 1);
-        assert_eq!(chunks[0].text, "tiny");
+        assert_eq!(chunks[0].text(), "tiny");
     }
 
     #[test]

@@ -16,7 +16,7 @@ impl From<konan_core::Chunk> for PyChunk {
 impl PyChunk {
     #[getter]
     fn text(&self) -> &str {
-        &self.inner.text
+        self.inner.text()
     }
     #[getter]
     fn start(&self) -> usize {
@@ -30,16 +30,24 @@ impl PyChunk {
     fn index(&self) -> usize {
         self.inner.index
     }
+    /// Hex digest, as before the core switched to storing the raw u64 — the
+    /// formatting just happens on access now instead of for every chunk.
     #[getter]
-    fn hash(&self) -> &str {
-        &self.inner.hash
+    fn hash(&self) -> String {
+        self.inner.hash_hex()
+    }
+    /// The raw xxh3-64 digest, for callers who would only parse `hash` back.
+    #[getter]
+    fn hash_int(&self) -> u64 {
+        self.inner.hash
     }
     fn __len__(&self) -> usize {
-        self.inner.text.chars().count()
+        self.inner.text().chars().count()
     }
     fn __repr__(&self) -> String {
-        let mut preview: String = self.inner.text.chars().take(40).collect();
-        if self.inner.text.chars().count() > 40 {
+        let text = self.inner.text();
+        let mut preview: String = text.chars().take(40).collect();
+        if text.chars().count() > 40 {
             preview.push('…');
         }
         format!(

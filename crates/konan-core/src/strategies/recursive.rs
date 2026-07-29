@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
@@ -97,7 +99,8 @@ impl RecursiveChunker {
 }
 
 impl Chunker for RecursiveChunker {
-    fn chunk(&self, text: &str) -> Result<Vec<Chunk>, KonanError> {
+    fn chunk_shared(&self, src: &Arc<str>) -> Result<Vec<Chunk>, KonanError> {
+        let text: &str = src;
         if text.trim().is_empty() {
             return Ok(Vec::new());
         }
@@ -105,7 +108,7 @@ impl Chunker for RecursiveChunker {
         let mut units = Vec::new();
         self.split_units(text, &map, (0, text.len()), 0, &mut units);
         let merged = merge_spans(&map, &units, self.chunk_size, self.chunk_overlap);
-        Ok(spans_to_chunks(text, &map, &merged))
+        Ok(spans_to_chunks(src, &map, &merged))
     }
 }
 
@@ -122,8 +125,8 @@ mod tests {
             .chunk(text)
             .unwrap();
         assert_eq!(chunks.len(), 3);
-        assert!(chunks[0].text.starts_with("Para one"));
-        assert!(chunks[1].text.starts_with("Para two"));
+        assert!(chunks[0].text().starts_with("Para one"));
+        assert!(chunks[1].text().starts_with("Para two"));
         assert_char_offsets(text, &chunks);
     }
 

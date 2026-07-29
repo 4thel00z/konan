@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
@@ -19,17 +21,17 @@ impl NaiveChunker {
 }
 
 impl Chunker for NaiveChunker {
-    fn chunk(&self, text: &str) -> Result<Vec<Chunk>, KonanError> {
-        let words = word_spans(text);
+    fn chunk_shared(&self, src: &Arc<str>) -> Result<Vec<Chunk>, KonanError> {
+        let words = word_spans(src);
         if words.is_empty() {
             return Ok(Vec::new());
         }
-        let map = OffsetMap::new(text);
+        let map = OffsetMap::new(src);
         let spans: Vec<(usize, usize)> = words
             .chunks(self.chunk_size)
             .map(|group| (group[0].0, group.last().unwrap().1))
             .collect();
-        Ok(spans_to_chunks(text, &map, &spans))
+        Ok(spans_to_chunks(src, &map, &spans))
     }
 }
 
@@ -42,7 +44,7 @@ mod tests {
     fn groups_words() {
         let text = "one two three four five";
         let chunks = NaiveChunker::new(2).unwrap().chunk(text).unwrap();
-        let texts: Vec<&str> = chunks.iter().map(|c| c.text.as_str()).collect();
+        let texts: Vec<&str> = chunks.iter().map(|c| c.text()).collect();
         assert_eq!(texts, vec!["one two", "three four", "five"]);
         assert_eq!((chunks[1].start, chunks[1].end), (8, 18));
         assert_char_offsets(text, &chunks);
