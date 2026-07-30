@@ -1005,7 +1005,7 @@ dependencies = [
 
 [[package]]
 name = "konan-core"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-openai",
  "async-trait",
@@ -1023,12 +1023,13 @@ dependencies = [
  "thiserror",
  "tokio",
  "tower",
+ "unicode-general-category",
  "xxhash-rust",
 ]
 
 [[package]]
 name = "konan-py"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "async-trait",
  "futures",
@@ -2076,6 +2077,12 @@ name = "unicase"
 version = "2.9.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "dbc4bc3a9f746d862c45cb89d705aa10f187bb96c76001afab07a0d35ce60142"
+
+[[package]]
+name = "unicode-general-category"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2281c8c1d221438e373249e065ca4989c4c36952c211ff21a0ee91c44a3869e7"
 
 [[package]]
 name = "unicode-ident"

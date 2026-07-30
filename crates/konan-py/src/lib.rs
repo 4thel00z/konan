@@ -4,6 +4,7 @@ mod chunk;
 mod chunkers;
 mod common;
 mod errors;
+mod metrics;
 mod semantic;
 
 #[pymodule]
@@ -17,6 +18,8 @@ fn _konan(py: Python<'_>, m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<chunkers::PyMarkdownChunker>()?;
     m.add_class::<chunkers::PyTokenChunker>()?;
     m.add("EmbeddingError", py.get_type::<errors::EmbeddingError>())?;
+    m.add_class::<metrics::PyTextMetrics>()?;
+    m.add_function(wrap_pyfunction!(metrics::measure_text, m)?)?;
     m.add_class::<semantic::PyOpenAIEmbedder>()?;
     m.add_class::<semantic::PySemanticChunker>()?;
     Ok(())

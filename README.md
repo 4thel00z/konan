@@ -124,6 +124,28 @@ chunks = await chunker.chunk_async(article)   # async-only for Python embedders
 > numpy arrays. They are async-only: `chunk()`/`chunk_many()` raise a
 > `RuntimeError` pointing you at the `_async` variants.
 
+## Bounded text metrics
+
+`measure_text` counts non-whitespace content without constructing a compacted
+copy. It ignores NUL layout noise and stops after `max_source_characters` source
+code points, so whitespace- or NUL-heavy input is bounded too. Whitespace and
+alphanumeric classification uses Unicode 15.0 data to match Python 3.12 for
+Unicode scalar values; lone surrogates are rejected because Rust strings cannot
+represent them.
+
+```python
+from konan import measure_text
+
+metrics = measure_text(extracted_text, max_source_characters=200_000)
+metrics.content_characters
+metrics.alphanumeric_characters
+metrics.exceeded_limit
+```
+
+This additive API is scheduled for Konan 0.5.0. Consumers constrained to
+`konan>=0.4,<0.5` must move to `konan>=0.5,<0.6` and refresh their lockfiles
+before adopting it.
+
 ## The `Chunk` object
 
 ```python

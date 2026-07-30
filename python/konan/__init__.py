@@ -10,8 +10,10 @@ from konan._konan import (
     RecursiveChunker,
     SemanticChunker,
     SentenceChunker,
+    TextMetrics,
     TokenChunker,
     __version__,
+    measure_text,
 )
 
 __all__ = [
@@ -24,6 +26,8 @@ __all__ = [
     "RecursiveChunker",
     "SemanticChunker",
     "SentenceChunker",
+    "TextMetrics",
     "TokenChunker",
     "__version__",
+    "measure_text",
 ]
