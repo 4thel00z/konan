@@ -18,8 +18,13 @@ rayon = "1.10"
 reqwest = { version = "0.13", default-features = false }
 serde = { version = "1", features = ["derive"] }
 thiserror = "2"
+tokenizers = { version = "0.23.2", default-features = false, features = ["fancy-regex"], optional = true }
 tower = "0.5"
 xxhash-rust = { version = "0.8", features = ["xxh3"] }
+
+[features]
+# Size chunks by any Hugging Face `tokenizer.json`.
+hf-tokenizers = ["dep:tokenizers"]
 
 [dev-dependencies]
 criterion = "0.8"

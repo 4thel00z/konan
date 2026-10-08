@@ -4,8 +4,9 @@ use std::sync::Arc;
 use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
+use crate::size::{Measure, SizeUnit};
 use crate::strategies::recursive::RecursiveChunker;
-use crate::text::{merge_spans, OffsetMap};
+use crate::text::{merge_spans, stable_merge, OffsetMap};
 
 /// Markdown-structure-aware chunker. Splits along top-level blocks, never
 /// splits fenced code blocks, and prefixes each chunk with its heading
@@ -16,6 +17,8 @@ pub struct MarkdownChunker {
     chunk_size: usize,
     chunk_overlap: usize,
     splitter: RecursiveChunker,
+    size_unit: SizeUnit,
+    stable_boundaries: bool,
 }
 
 struct Block {
@@ -85,7 +88,22 @@ impl MarkdownChunker {
             chunk_size,
             chunk_overlap,
             splitter,
+            size_unit: SizeUnit::Chars,
+            stable_boundaries: false,
         })
+    }
+
+    /// Measures `chunk_size` and `chunk_overlap` in `size_unit` instead of chars.
+    pub fn with_size_unit(mut self, size_unit: SizeUnit) -> Self {
+        self.size_unit = size_unit;
+        self
+    }
+
+    /// Picks cut points from chunk content instead of filling each chunk
+    /// greedily, so an edit only changes the chunks near it.
+    pub fn with_stable_boundaries(mut self, stable_boundaries: bool) -> Self {
+        self.stable_boundaries = stable_boundaries;
+        self
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -93,6 +111,7 @@ impl MarkdownChunker {
         &self,
         src: &Arc<str>,
         map: &OffsetMap,
+        measure: &impl Measure,
         cursor: &mut crate::text::CharCursor,
         section: &[(usize, usize, bool)],
         breadcrumb: &str,
@@ -105,13 +124,25 @@ impl MarkdownChunker {
         // Oversized non-code blocks get recursively split; code blocks stay atomic.
         let mut units: Vec<(usize, usize)> = Vec::new();
         for &(s, e, is_code) in section {
-            if !is_code && map.char_len(s, e) > self.chunk_size {
-                self.splitter.split_units(text, map, (s, e), 0, &mut units);
+            if !is_code && measure.len(s, e) > self.chunk_size {
+                self.splitter
+                    .split_units(text, measure, (s, e), 0, &mut units);
             } else {
                 units.push((s, e));
             }
         }
-        for (s, e) in merge_spans(map, &units, self.chunk_size, self.chunk_overlap) {
+        let merged = if self.stable_boundaries {
+            stable_merge(
+                measure,
+                text,
+                units.into_iter(),
+                self.chunk_size,
+                self.chunk_overlap,
+            )
+        } else {
+            merge_spans(measure, &units, self.chunk_size, self.chunk_overlap)
+        };
+        for (s, e) in merged {
             let content = text[s..e].trim_end();
             let content_end = s + content.len();
             let index = chunks.len();
@@ -139,6 +170,16 @@ impl Chunker for MarkdownChunker {
             return Ok(Vec::new());
         }
         let map = OffsetMap::new(text);
+        Ok(match self.size_unit.token_measure(text)? {
+            None => self.sections(src, &map, &map),
+            Some(tokens) => self.sections(src, &map, &tokens),
+        })
+    }
+}
+
+impl MarkdownChunker {
+    fn sections(&self, src: &Arc<str>, map: &OffsetMap, measure: &impl Measure) -> Vec<Chunk> {
+        let text: &str = src;
         // Merged span starts ascend across sections, so one cursor suffices.
         let mut cursor = map.cursor();
         let mut chunks: Vec<Chunk> = Vec::new();
@@ -150,7 +191,15 @@ impl Chunker for MarkdownChunker {
 
         for block in parse_blocks(text) {
             if let Some(level) = block.heading {
-                self.flush_section(src, &map, &mut cursor, &section, &breadcrumb, &mut chunks);
+                self.flush_section(
+                    src,
+                    map,
+                    measure,
+                    &mut cursor,
+                    &section,
+                    &breadcrumb,
+                    &mut chunks,
+                );
                 section.clear();
                 let title = text[block.span.0..block.span.1]
                     .trim()
@@ -182,14 +231,24 @@ impl Chunker for MarkdownChunker {
                 section.push((block.span.0, block.span.1, block.is_code));
             }
         }
-        self.flush_section(src, &map, &mut cursor, &section, &breadcrumb, &mut chunks);
-        Ok(chunks)
+        self.flush_section(
+            src,
+            map,
+            measure,
+            &mut cursor,
+            &section,
+            &breadcrumb,
+            &mut chunks,
+        );
+        chunks
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::size::Encoding;
+    use crate::text::{assert_token_budget, new_chunks, varied_prose};
 
     const MD: &str = "# Guide\n\nIntro paragraph about the guide.\n\n## Install\n\nRun the installer.\n\n```bash\npip install konan\n```\n";
 
@@ -265,6 +324,64 @@ mod tests {
             sub_chunk.text().starts_with("# Title > ## Sub\n\n"),
             "got: {:?}",
             sub_chunk.text()
+        );
+    }
+
+    fn long_markdown() -> String {
+        let prose = varied_prose(900);
+        let paragraphs: Vec<&str> = prose.split("\n\n").collect();
+        let mut md = String::new();
+        for (i, p) in paragraphs.iter().enumerate() {
+            if i % 5 == 0 {
+                md.push_str(&format!("## Part {i}\n\n"));
+            }
+            md.push_str(p);
+            md.push_str("\n\n");
+        }
+        md
+    }
+
+    #[test]
+    fn token_size_unit_fits_budget() {
+        let md = long_markdown();
+        for (overlap, stable) in [(0, false), (16, true)] {
+            let chunks = MarkdownChunker::new(64, overlap)
+                .unwrap()
+                .with_size_unit(SizeUnit::Tokens(Encoding::O200kBase))
+                .with_stable_boundaries(stable)
+                .chunk(&md)
+                .unwrap();
+            assert!(chunks.len() > 10);
+            for c in &chunks {
+                assert!(c.text().ends_with(&source_slice(&md, c)));
+            }
+            assert_token_budget(Encoding::O200kBase, &md, &chunks, 64);
+        }
+    }
+
+    #[test]
+    fn stable_boundaries_survive_an_edit() {
+        let md = long_markdown();
+        let mid = md.len() / 2;
+        let at = mid + md[mid..].find(". ").unwrap() + 2;
+        let edited = format!(
+            "{}Inserted sentence about nothing much. {}",
+            &md[..at],
+            &md[at..]
+        );
+        let run = |stable: bool| {
+            let chunker = MarkdownChunker::new(120, 0)
+                .unwrap()
+                .with_stable_boundaries(stable);
+            new_chunks(
+                &chunker.chunk(&md).unwrap(),
+                &chunker.chunk(&edited).unwrap(),
+            )
+        };
+        assert!(
+            run(true) <= 3,
+            "stable boundaries changed {} chunks",
+            run(true)
         );
     }
 }

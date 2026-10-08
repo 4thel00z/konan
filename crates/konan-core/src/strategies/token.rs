@@ -3,7 +3,8 @@ use std::sync::Arc;
 use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
-use crate::text::{paragraph_cuts, OffsetMap};
+use crate::size::{token_offsets, Encoding};
+use crate::text::OffsetMap;
 use bpe_openai::Tokenizer;
 
 /// Token-exact chunker via bpe-openai (tiktoken-equivalent tokenization,
@@ -29,75 +30,12 @@ impl TokenChunker {
                 "chunk_overlap must be smaller than chunk_size".into(),
             ));
         }
-        // Both supported encodings skip NFC normalization, so token byte
-        // lengths map directly onto the input text — required for offsets.
-        let tokenizer = match encoding {
-            "cl100k_base" => bpe_openai::cl100k_base(),
-            "o200k_base" => bpe_openai::o200k_base(),
-            other => return Err(KonanError::Tokenizer(format!("unknown encoding: {other}"))),
-        };
+        let tokenizer = Encoding::from_name(encoding)?.tokenizer();
         Ok(Self {
             tokenizer,
             chunk_size,
             chunk_overlap,
         })
-    }
-
-    /// Byte offset where each token starts, plus a sentinel holding the total
-    /// byte length. `token_len` is an O(1) dictionary lookup of the token's raw
-    /// byte length, so the offsets tile the source exactly.
-    ///
-    /// `base` is added to every offset, letting a caller compute offsets for a
-    /// slice of a larger text.
-    fn token_offsets_seq(&self, text: &str, base: usize) -> Vec<usize> {
-        let tokens = self.tokenizer.encode(text);
-        let mut offsets = Vec::with_capacity(tokens.len() + 1);
-        let mut pos = base;
-        for &tok in &tokens {
-            offsets.push(pos);
-            pos += self.tokenizer.bpe.token_len(tok);
-        }
-        offsets.push(pos);
-        offsets
-    }
-
-    /// [`Self::token_offsets_seq`] over the whole text, spreading the BPE pass
-    /// across cores for inputs big enough to pay for the split.
-    ///
-    /// BPE encoding dominates this strategy by roughly 30x over every other
-    /// chunker, and it parallelises exactly because the pretokenizer never emits
-    /// a token spanning a paragraph break — see [`paragraph_cuts`].
-    fn token_offsets(&self, text: &str) -> Vec<usize> {
-        /// Below this the join and the cut scan cost more than they save.
-        const PARALLEL_MIN_BYTES: usize = 256 * 1024;
-
-        if text.len() < PARALLEL_MIN_BYTES {
-            return self.token_offsets_seq(text, 0);
-        }
-        // Over-subscribing keeps threads fed when paragraph sizes are uneven.
-        let cuts = paragraph_cuts(text, rayon::current_num_threads() * 8);
-        if cuts.len() <= 2 {
-            // No usable paragraph break (e.g. one enormous line).
-            return self.token_offsets_seq(text, 0);
-        }
-        use rayon::prelude::*;
-        let windows: Vec<(usize, usize)> = cuts.windows(2).map(|w| (w[0], w[1])).collect();
-        let last = windows.len() - 1;
-        let mut pieces: Vec<Vec<usize>> = windows
-            .into_par_iter()
-            .map(|(s, e)| self.token_offsets_seq(&text[s..e], s))
-            .collect();
-        // Every piece ends with a sentinel equal to the next piece's first
-        // offset, so all but the final sentinel are redundant.
-        let total: usize = pieces.iter().map(Vec::len).sum();
-        let mut out = Vec::with_capacity(total);
-        for (k, piece) in pieces.iter_mut().enumerate() {
-            if k != last {
-                piece.pop();
-            }
-            out.append(piece);
-        }
-        out
     }
 }
 
@@ -107,7 +45,7 @@ impl Chunker for TokenChunker {
         if text.is_empty() {
             return Ok(Vec::new());
         }
-        let offsets = self.token_offsets(text);
+        let offsets = token_offsets(self.tokenizer, text);
         if offsets.len() < 2 {
             return Ok(Vec::new());
         }
@@ -153,7 +91,8 @@ impl Chunker for TokenChunker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::text::assert_char_offsets;
+    use crate::size::token_offsets_at;
+    use crate::text::{assert_char_offsets, paragraph_cuts};
 
     /// Multi-paragraph text over the parallel threshold, so `token_offsets`
     /// actually takes the rayon path.
@@ -188,8 +127,8 @@ mod tests {
                 "{enc}: corpus must exercise the parallel path"
             );
             assert_eq!(
-                chunker.token_offsets(&text),
-                chunker.token_offsets_seq(&text, 0),
+                token_offsets(chunker.tokenizer, &text),
+                token_offsets_at(chunker.tokenizer, &text, 0),
                 "{enc}: parallel offsets diverge from sequential"
             );
             // Stronger claim: the token stream itself is identical, not just the
@@ -211,8 +150,8 @@ mod tests {
         let chunker = TokenChunker::new(512, 64, "cl100k_base").unwrap();
         let parallel = chunker.chunk(&text).unwrap();
         // Reproduce the sequential path by chunking with sequential offsets.
-        let seq_offsets = chunker.token_offsets_seq(&text, 0);
-        assert_eq!(chunker.token_offsets(&text), seq_offsets);
+        let seq_offsets = token_offsets_at(chunker.tokenizer, &text, 0);
+        assert_eq!(token_offsets(chunker.tokenizer, &text), seq_offsets);
         assert!(parallel.len() > 1);
         assert_char_offsets(&text, &parallel);
     }
@@ -227,8 +166,8 @@ mod tests {
         assert_eq!(cuts, vec![0, text.len()], "no newline means no cut");
         let chunker = TokenChunker::new(512, 64, "cl100k_base").unwrap();
         assert_eq!(
-            chunker.token_offsets(&text),
-            chunker.token_offsets_seq(&text, 0)
+            token_offsets(chunker.tokenizer, &text),
+            token_offsets_at(chunker.tokenizer, &text, 0)
         );
     }
 
