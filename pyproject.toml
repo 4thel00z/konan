@@ -49,6 +49,7 @@ dev = [
     "maturin>=1.7",
     "pytest>=8",
     "pytest-asyncio>=0.25",
+    "tokenizers>=0.22",
 ]
 
 [tool.pytest.ini_options]

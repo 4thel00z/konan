@@ -3,7 +3,10 @@ use std::sync::Arc;
 use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
-use crate::text::{merge_span_iter, spans_to_chunks, OffsetMap, SentenceUnits, WordUnits};
+use crate::size::{Measure, SizeUnit};
+use crate::text::{
+    merge_span_iter, spans_to_chunks, stable_merge, OffsetMap, SentenceUnits, WordUnits,
+};
 
 /// Character-based chunker with overlap and sentence-boundary awareness.
 ///
@@ -17,6 +20,8 @@ pub struct FixedSizeChunker {
     chunk_size: usize,
     chunk_overlap: usize,
     respect_sentences: bool,
+    size_unit: SizeUnit,
+    stable_boundaries: bool,
 }
 
 impl FixedSizeChunker {
@@ -37,7 +42,49 @@ impl FixedSizeChunker {
             chunk_size,
             chunk_overlap,
             respect_sentences,
+            size_unit: SizeUnit::Chars,
+            stable_boundaries: false,
         })
+    }
+
+    /// Measures `chunk_size` and `chunk_overlap` in `size_unit` instead of chars.
+    pub fn with_size_unit(mut self, size_unit: SizeUnit) -> Self {
+        self.size_unit = size_unit;
+        self
+    }
+
+    /// Picks cut points from chunk content instead of filling each chunk
+    /// greedily, so an edit only changes the chunks near it.
+    pub fn with_stable_boundaries(mut self, stable_boundaries: bool) -> Self {
+        self.stable_boundaries = stable_boundaries;
+        self
+    }
+
+    fn merged_spans(&self, text: &str, measure: &impl Measure) -> Vec<(usize, usize)> {
+        if measure.len(0, text.len()) <= self.chunk_size {
+            return vec![(0, text.len())];
+        }
+        // Sentence mode applies when at least two sentence units exist
+        // (the legacy `spans.len() > 1` check), probed lazily.
+        if self.respect_sentences {
+            let mut probe = SentenceUnits::new(text);
+            if let (Some(a), Some(b)) = (probe.next(), probe.next()) {
+                return self.merge(text, measure, [a, b].into_iter().chain(probe));
+            }
+        }
+        self.merge(text, measure, WordUnits::new(text))
+    }
+
+    fn merge(
+        &self,
+        text: &str,
+        measure: &impl Measure,
+        units: impl Iterator<Item = (usize, usize)>,
+    ) -> Vec<(usize, usize)> {
+        if self.stable_boundaries {
+            return stable_merge(measure, text, units, self.chunk_size, self.chunk_overlap);
+        }
+        merge_span_iter(measure, units, self.chunk_size, self.chunk_overlap)
     }
 }
 
@@ -48,34 +95,9 @@ impl Chunker for FixedSizeChunker {
             return Ok(Vec::new());
         }
         let map = OffsetMap::new(text);
-        if map.char_len(0, text.len()) <= self.chunk_size {
-            return Ok(spans_to_chunks(src, &map, &[(0, text.len())]));
-        }
-        // Sentence mode applies when at least two sentence units exist
-        // (the legacy `spans.len() > 1` check), probed lazily.
-        let merged = if self.respect_sentences {
-            let mut probe = SentenceUnits::new(text);
-            let first = probe.next();
-            let second = probe.next();
-            match (first, second) {
-                (Some(a), Some(b)) => {
-                    let units = [a, b].into_iter().chain(probe);
-                    merge_span_iter(&map, units, self.chunk_size, self.chunk_overlap)
-                }
-                _ => merge_span_iter(
-                    &map,
-                    WordUnits::new(text),
-                    self.chunk_size,
-                    self.chunk_overlap,
-                ),
-            }
-        } else {
-            merge_span_iter(
-                &map,
-                WordUnits::new(text),
-                self.chunk_size,
-                self.chunk_overlap,
-            )
+        let merged = match self.size_unit.token_measure(text)? {
+            None => self.merged_spans(text, &map),
+            Some(tokens) => self.merged_spans(text, &tokens),
         };
         Ok(spans_to_chunks(src, &map, &merged))
     }
@@ -84,7 +106,11 @@ impl Chunker for FixedSizeChunker {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::text::{assert_char_offsets, merge_spans, regex_sentence_spans, word_spans};
+    use crate::size::Encoding;
+    use crate::text::{
+        assert_char_offsets, assert_token_budget, merge_spans, new_chunks, regex_sentence_spans,
+        varied_prose, word_spans,
+    };
 
     const TEXT: &str =
         "First sentence here. Second sentence follows! Third one now? Fourth and final.";
@@ -230,5 +256,57 @@ mod tests {
     #[test]
     fn rejects_overlap_ge_size() {
         assert!(FixedSizeChunker::new(100, 100, true).is_err());
+    }
+
+    #[test]
+    fn token_size_unit_fits_budget() {
+        let text = varied_prose(600);
+        for &(size, overlap) in &[(16usize, 0usize), (64, 16), (256, 32)] {
+            for stable in [false, true] {
+                let chunks = FixedSizeChunker::new(size, overlap, false)
+                    .unwrap()
+                    .with_size_unit(SizeUnit::Tokens(Encoding::Cl100kBase))
+                    .with_stable_boundaries(stable)
+                    .chunk(&text)
+                    .unwrap();
+                assert!(chunks.len() > 1);
+                assert_char_offsets(&text, &chunks);
+                assert_token_budget(Encoding::Cl100kBase, &text, &chunks, size);
+            }
+        }
+    }
+
+    #[test]
+    fn short_text_in_tokens_is_single_chunk() {
+        let chunks = FixedSizeChunker::new(8, 0, true)
+            .unwrap()
+            .with_size_unit(SizeUnit::Tokens(Encoding::Cl100kBase))
+            .chunk("a handful of short words here")
+            .unwrap();
+        assert_eq!(chunks.len(), 1);
+    }
+
+    #[test]
+    fn stable_boundaries_survive_an_edit() {
+        let text = varied_prose(1500);
+        let mid = text.len() / 2;
+        let at = mid + text[mid..].find(' ').unwrap() + 1;
+        let edited = format!("{}inserted words {}", &text[..at], &text[at..]);
+        let run = |stable: bool| {
+            let chunker = FixedSizeChunker::new(300, 0, false)
+                .unwrap()
+                .with_stable_boundaries(stable);
+            new_chunks(
+                &chunker.chunk(&text).unwrap(),
+                &chunker.chunk(&edited).unwrap(),
+            )
+        };
+        let greedy = run(false);
+        let stable = run(true);
+        assert!(
+            greedy >= 10,
+            "the edit must disturb greedy packing: {greedy}"
+        );
+        assert!(stable <= 5, "stable boundaries changed {stable} chunks");
     }
 }

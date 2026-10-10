@@ -3,7 +3,8 @@ use std::sync::Arc;
 use crate::chunk::Chunk;
 use crate::chunker::Chunker;
 use crate::error::KonanError;
-use crate::text::{merge_spans, spans_to_chunks, OffsetMap};
+use crate::size::{Measure, SizeUnit};
+use crate::text::{merge_spans, spans_to_chunks, stable_merge, OffsetMap};
 
 /// Recursively splits text using a hierarchy of separators
 /// (paragraph -> line -> space -> punctuation -> chars), then merges
@@ -12,6 +13,8 @@ pub struct RecursiveChunker {
     chunk_size: usize,
     chunk_overlap: usize,
     separators: Vec<String>,
+    size_unit: SizeUnit,
+    stable_boundaries: bool,
 }
 
 impl RecursiveChunker {
@@ -38,41 +41,44 @@ impl RecursiveChunker {
             chunk_size,
             chunk_overlap,
             separators,
+            size_unit: SizeUnit::Chars,
+            stable_boundaries: false,
         })
     }
 
-    /// Split `span` into unit spans each at most `chunk_size` chars (or
-    /// unsplittable), using the separator hierarchy starting at `sep_idx`.
-    /// Each piece keeps its trailing separator so chunks reproduce the source.
+    /// Measures `chunk_size` and `chunk_overlap` in `size_unit` instead of chars.
+    pub fn with_size_unit(mut self, size_unit: SizeUnit) -> Self {
+        self.size_unit = size_unit;
+        self
+    }
+
+    /// Picks cut points from chunk content instead of filling each chunk
+    /// greedily, so an edit only changes the chunks near it.
+    pub fn with_stable_boundaries(mut self, stable_boundaries: bool) -> Self {
+        self.stable_boundaries = stable_boundaries;
+        self
+    }
+
+    /// Split `span` into unit spans each at most `size` units of `measure`
+    /// (or unsplittable), using the separator hierarchy starting at
+    /// `sep_idx`. Each piece keeps its trailing separator so chunks reproduce
+    /// the source.
     pub(crate) fn split_units(
         &self,
         text: &str,
-        map: &OffsetMap,
+        measure: &impl Measure,
         span: (usize, usize),
+        size: usize,
         sep_idx: usize,
         out: &mut Vec<(usize, usize)>,
     ) {
-        if map.char_len(span.0, span.1) <= self.chunk_size || sep_idx >= self.separators.len() {
+        if measure.len(span.0, span.1) <= size || sep_idx >= self.separators.len() {
             out.push(span);
             return;
         }
         let sep = &self.separators[sep_idx];
         if sep.is_empty() {
-            // Last resort: split into chunk_size-char pieces.
-            let mut start = span.0;
-            let mut count = 0;
-            for (b, _) in text[span.0..span.1].char_indices() {
-                let abs = span.0 + b;
-                if count == self.chunk_size {
-                    out.push((start, abs));
-                    start = abs;
-                    count = 0;
-                }
-                count += 1;
-            }
-            if start < span.1 {
-                out.push((start, span.1));
-            }
+            measure.split_even(text, span, size, out);
             return;
         }
         let slice = &text[span.0..span.1];
@@ -83,17 +89,24 @@ impl RecursiveChunker {
             found = true;
             let sep_end = span.0 + search_from + pos + sep.len();
             if sep_end > piece_start {
-                self.split_units(text, map, (piece_start, sep_end), sep_idx + 1, out);
+                self.split_units(
+                    text,
+                    measure,
+                    (piece_start, sep_end),
+                    size,
+                    sep_idx + 1,
+                    out,
+                );
             }
             piece_start = sep_end;
             search_from = search_from + pos + sep.len();
         }
         if !found {
-            self.split_units(text, map, span, sep_idx + 1, out);
+            self.split_units(text, measure, span, size, sep_idx + 1, out);
             return;
         }
         if piece_start < span.1 {
-            self.split_units(text, map, (piece_start, span.1), sep_idx + 1, out);
+            self.split_units(text, measure, (piece_start, span.1), size, sep_idx + 1, out);
         }
     }
 }
@@ -105,17 +118,45 @@ impl Chunker for RecursiveChunker {
             return Ok(Vec::new());
         }
         let map = OffsetMap::new(text);
-        let mut units = Vec::new();
-        self.split_units(text, &map, (0, text.len()), 0, &mut units);
-        let merged = merge_spans(&map, &units, self.chunk_size, self.chunk_overlap);
+        let merged = match self.size_unit.token_measure(text)? {
+            None => self.merged_spans(text, &map),
+            Some(tokens) => self.merged_spans(text, &tokens),
+        };
         Ok(spans_to_chunks(src, &map, &merged))
+    }
+}
+
+impl RecursiveChunker {
+    fn merged_spans(&self, text: &str, measure: &impl Measure) -> Vec<(usize, usize)> {
+        let mut units = Vec::new();
+        self.split_units(
+            text,
+            measure,
+            (0, text.len()),
+            self.chunk_size,
+            0,
+            &mut units,
+        );
+        if self.stable_boundaries {
+            return stable_merge(
+                measure,
+                text,
+                units.into_iter(),
+                self.chunk_size,
+                self.chunk_overlap,
+            );
+        }
+        merge_spans(measure, &units, self.chunk_size, self.chunk_overlap)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::text::assert_char_offsets;
+    use crate::size::Encoding;
+    use crate::text::{
+        assert_char_offsets, assert_token_budget, insert_mid_sentence, new_chunks, varied_prose,
+    };
 
     #[test]
     fn prefers_paragraph_breaks() {
@@ -176,5 +217,89 @@ mod tests {
             .unwrap();
         assert_eq!(chunks.len(), 4);
         assert_char_offsets(text, &chunks);
+    }
+
+    #[test]
+    fn token_size_unit_fits_budget() {
+        let text = varied_prose(600) + "😀😁😂🤣😃😄😅😆😉😊 schön müde";
+        for encoding in [Encoding::Cl100kBase, Encoding::O200kBase] {
+            let configs = [
+                (16usize, 0usize, false),
+                (64, 16, false),
+                (256, 64, false),
+                (16, 0, true),
+                (64, 16, true),
+                (256, 32, true),
+            ];
+            for (size, overlap, stable) in configs {
+                let chunks = RecursiveChunker::new(size, overlap, None)
+                    .unwrap()
+                    .with_size_unit(SizeUnit::Tokens(encoding))
+                    .with_stable_boundaries(stable)
+                    .chunk(&text)
+                    .unwrap();
+                assert!(chunks.len() > 1);
+                assert_char_offsets(&text, &chunks);
+                assert_token_budget(encoding, &text, &chunks, size);
+            }
+        }
+    }
+
+    #[test]
+    fn token_overlap_never_pushes_a_chunk_over_budget() {
+        let prose = varied_prose(800);
+        let words: Vec<&str> = prose.split_whitespace().collect();
+        let mut text = String::new();
+        let mut at = 0;
+        for n in (35..60).cycle().step_by(7).take(60) {
+            text.push_str(&words[at..at + n].join(" "));
+            text.push_str("\n\n");
+            at += n;
+        }
+        let chunks = RecursiveChunker::new(64, 16, None)
+            .unwrap()
+            .with_size_unit(SizeUnit::Tokens(Encoding::Cl100kBase))
+            .chunk(&text)
+            .unwrap();
+        assert!(
+            chunks.windows(2).any(|w| w[1].start < w[0].end),
+            "overlap must be exercised"
+        );
+        assert_token_budget(Encoding::Cl100kBase, &text, &chunks, 64);
+    }
+
+    #[test]
+    fn token_char_fallback_splits_long_words() {
+        let text = "x".repeat(500) + " tail";
+        let chunks = RecursiveChunker::new(8, 0, None)
+            .unwrap()
+            .with_size_unit(SizeUnit::Tokens(Encoding::Cl100kBase))
+            .chunk(&text)
+            .unwrap();
+        assert!(chunks.len() > 3);
+        assert_char_offsets(&text, &chunks);
+        assert_token_budget(Encoding::Cl100kBase, &text, &chunks, 8);
+    }
+
+    #[test]
+    fn stable_boundaries_survive_an_edit() {
+        let text = varied_prose(1500);
+        let edited = insert_mid_sentence(&text);
+        let run = |stable: bool| {
+            let chunker = RecursiveChunker::new(300, 0, None)
+                .unwrap()
+                .with_stable_boundaries(stable);
+            new_chunks(
+                &chunker.chunk(&text).unwrap(),
+                &chunker.chunk(&edited).unwrap(),
+            )
+        };
+        let greedy = run(false);
+        let stable = run(true);
+        assert!(
+            greedy > 100,
+            "the edit must disturb greedy packing: {greedy}"
+        );
+        assert!(stable <= 5, "stable boundaries changed {stable} chunks");
     }
 }

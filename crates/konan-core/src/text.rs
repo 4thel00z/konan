@@ -3,7 +3,10 @@
 
 use std::sync::Arc;
 
+use xxhash_rust::xxh3::xxh3_64;
+
 use crate::chunk::Chunk;
+use crate::size::Measure;
 
 /// Byte→char conversion for one source text. For pure-ASCII text every
 /// operation is O(1) byte arithmetic. For non-ASCII text spans are counted
@@ -47,18 +50,14 @@ fn swar_ge(x: u64, k: u64) -> u64 {
 /// filter loop it replaced, which only reached ~4 GB/s even auto-vectorised.
 fn count_chars(s: &str) -> usize {
     let bytes = s.as_bytes();
-    let mut chunks = bytes.chunks_exact(8);
+    let (blocks, rest) = bytes.as_chunks::<8>();
     let mut cont = 0u32;
-    for c in chunks.by_ref() {
-        let x = u64::from_ne_bytes(c.try_into().expect("chunks_exact(8) yields 8 bytes"));
+    for &block in blocks {
+        let x = u64::from_ne_bytes(block);
         cont += (x & !(x << 1) & SWAR_HI).count_ones();
     }
     // 0..7 trailing bytes: 0x80..=0xBF is the continuation range.
-    cont += chunks
-        .remainder()
-        .iter()
-        .filter(|&&b| (b as i8) < -0x40)
-        .count() as u32;
+    cont += rest.iter().filter(|&&b| (b as i8) < -0x40).count() as u32;
     bytes.len() - cont as usize
 }
 
@@ -465,22 +464,22 @@ impl Iterator for WordUnits<'_> {
     }
 }
 
-/// Merge unit spans into chunk spans of at most `chunk_size` chars, carrying
-/// at most `chunk_overlap` trailing chars of units into the next chunk.
-/// A single unit larger than `chunk_size` becomes its own chunk.
+/// Merge unit spans into chunk spans of at most `chunk_size` units of
+/// `measure`, carrying at most `chunk_overlap` trailing units into the next
+/// chunk. A single unit larger than `chunk_size` becomes its own chunk.
 pub(crate) fn merge_spans(
-    map: &OffsetMap,
+    measure: &impl Measure,
     spans: &[(usize, usize)],
     chunk_size: usize,
     chunk_overlap: usize,
 ) -> Vec<(usize, usize)> {
-    merge_span_iter(map, spans.iter().copied(), chunk_size, chunk_overlap)
+    merge_span_iter(measure, spans.iter().copied(), chunk_size, chunk_overlap)
 }
 
 /// [`merge_spans`] over a lazy unit iterator: identical semantics, no
 /// materialised unit vector.
-pub(crate) fn merge_span_iter(
-    map: &OffsetMap,
+pub(crate) fn merge_span_iter<M: Measure>(
+    measure: &M,
     spans: impl Iterator<Item = (usize, usize)>,
     chunk_size: usize,
     chunk_overlap: usize,
@@ -492,9 +491,9 @@ pub(crate) fn merge_span_iter(
     // reversed a fresh `keep` Vec at every chunk boundary.
     let mut arena: Vec<(usize, usize)> = Vec::new();
     let mut lo = 0usize;
-    // Char length of (arena[lo].0 .. arena.last().1), maintained incrementally
-    // so unicode texts never recount the whole window.
-    let mut window_chars = 0usize;
+    // Size of (arena[lo].0 .. arena.last().1), maintained incrementally so
+    // unicode texts never recount the whole window.
+    let mut window = 0usize;
     for span in spans {
         // Once the dead prefix dominates, drop it so the arena stays proportional
         // to the live window rather than to the whole input. Amortised O(1).
@@ -503,7 +502,7 @@ pub(crate) fn merge_span_iter(
             lo = 0;
         }
         let hi = arena.len();
-        if lo < hi && window_chars + map.char_len(arena[hi - 1].1, span.1) > chunk_size {
+        if lo < hi && window + measure.len(arena[hi - 1].1, span.1) > chunk_size {
             let merged = (arena[lo].0, arena[hi - 1].1);
             if out.last() != Some(&merged) {
                 out.push(merged);
@@ -513,7 +512,7 @@ pub(crate) fn merge_span_iter(
             let mut acc = 0usize;
             let mut new_lo = hi;
             for k in (lo..hi).rev() {
-                let len = map.char_len(arena[k].0, arena[k].1);
+                let len = measure.len(arena[k].0, arena[k].1);
                 if acc + len > chunk_overlap {
                     break;
                 }
@@ -521,16 +520,27 @@ pub(crate) fn merge_span_iter(
                 new_lo = k;
             }
             lo = new_lo;
-            window_chars = if lo < hi {
-                map.char_len(arena[lo].0, arena[hi - 1].1)
+            window = if lo < hi {
+                measure.len(arena[lo].0, arena[hi - 1].1)
             } else {
                 0
             };
+            while M::STRICT_BUDGET
+                && lo < hi
+                && window + measure.len(arena[hi - 1].1, span.1) > chunk_size
+            {
+                lo += 1;
+                window = if lo < hi {
+                    measure.len(arena[lo].0, arena[hi - 1].1)
+                } else {
+                    0
+                };
+            }
         }
-        window_chars = if lo < arena.len() {
-            window_chars + map.char_len(arena[arena.len() - 1].1, span.1)
+        window = if lo < arena.len() {
+            window + measure.len(arena[arena.len() - 1].1, span.1)
         } else {
-            map.char_len(span.0, span.1)
+            measure.len(span.0, span.1)
         };
         arena.push(span);
     }
@@ -541,6 +551,79 @@ pub(crate) fn merge_span_iter(
         }
     }
     out
+}
+
+/// Merge units into chunks whose cut points depend on unit content, so an
+/// edit only changes the chunks near it.
+///
+/// Each chunk owns at most `chunk_size - chunk_overlap` units of `measure`.
+/// Once a chunk owns a quarter of that budget, every further unit ends it with
+/// probability proportional to the unit's size, decided by the unit's xxh3
+/// hash; chunks average about half the budget. A chunk is cut early only when
+/// the next unit would overflow the budget. Overlap is prepended from the
+/// preceding units afterwards and never moves a cut.
+pub(crate) fn stable_merge(
+    measure: &impl Measure,
+    text: &str,
+    units: impl Iterator<Item = (usize, usize)>,
+    chunk_size: usize,
+    chunk_overlap: usize,
+) -> Vec<(usize, usize)> {
+    let units: Vec<(usize, usize)> = units.collect();
+    let budget = chunk_size - chunk_overlap;
+    let min = budget / 4;
+    let spread = (budget / 4).max(1);
+    let mut owned: Vec<(usize, usize)> = Vec::new();
+    let mut first = 0usize;
+    let mut size = 0usize;
+    for (i, &(s, e)) in units.iter().enumerate() {
+        let unit = measure.len(s, e);
+        size = if i == first {
+            unit
+        } else {
+            size + measure.len(units[i - 1].1, e)
+        };
+        if i > first && size > budget {
+            owned.push((first, i));
+            first = i;
+            size = unit;
+        }
+        if size >= min && content_cut(&text[s..e], unit, spread) {
+            owned.push((first, i + 1));
+            first = i + 1;
+            size = 0;
+        }
+    }
+    if first < units.len() {
+        owned.push((first, units.len()));
+    }
+    // Overlap never reaches back to the previous chunk's first unit, so chunk
+    // starts strictly ascend.
+    let mut prev_lo = 0usize;
+    owned
+        .into_iter()
+        .map(|(a, b)| {
+            let end = units[b - 1].1;
+            let mut lo = a;
+            while lo > prev_lo + 1
+                && measure.len(units[lo - 1].0, units[a - 1].1) <= chunk_overlap
+                && measure.len(units[lo - 1].0, end) <= chunk_size
+            {
+                lo -= 1;
+            }
+            prev_lo = lo;
+            (units[lo].0, end)
+        })
+        .collect()
+}
+
+/// Whether a unit of `size` ends its chunk: true for a `size / spread` share
+/// of hash values, and always once `size >= spread`.
+fn content_cut(unit: &str, size: usize, spread: usize) -> bool {
+    if size >= spread {
+        return true;
+    }
+    xxh3_64(unit.as_bytes()) < (u64::MAX / spread as u64) * size as u64
 }
 
 /// Convert chunk byte spans into `Chunk`s with char offsets. Span starts and
@@ -571,6 +654,120 @@ pub(crate) fn assert_char_offsets(text: &str, chunks: &[Chunk]) {
         let expect: String = text.chars().skip(c.start).take(c.end - c.start).collect();
         assert_eq!(c.text(), expect, "chunk {} offsets are wrong", c.index);
     }
+}
+
+/// Deterministic prose of `sentences` sentences with varied words and a
+/// paragraph break every six sentences.
+#[cfg(test)]
+pub(crate) fn varied_prose(sentences: usize) -> String {
+    const WORDS: &[&str] = &[
+        "the",
+        "quick",
+        "brown",
+        "fox",
+        "jumps",
+        "over",
+        "lazy",
+        "dogs",
+        "while",
+        "seventy",
+        "wizards",
+        "briskly",
+        "mix",
+        "jugs",
+        "of",
+        "liquid",
+        "oxygen",
+        "under",
+        "pale",
+        "moonlight",
+        "river",
+        "stone",
+        "glass",
+        "winter",
+        "signal",
+        "harbor",
+        "copper",
+        "lantern",
+        "orbit",
+        "meadow",
+    ];
+    let mut out = String::new();
+    let mut x: u64 = 7;
+    let mut next = || {
+        x = x
+            .wrapping_mul(6364136223846793005)
+            .wrapping_add(1442695040888963407);
+        x
+    };
+    for i in 0..sentences {
+        let len = 5 + (next() >> 59) as usize;
+        let start = out.len();
+        for k in 0..len {
+            out.push_str(WORDS[(next() >> 40) as usize % WORDS.len()]);
+            out.push(if k + 1 == len { '.' } else { ' ' });
+        }
+        out[start..start + 1].make_ascii_uppercase();
+        out.push_str(if i % 6 == 5 { "\n\n" } else { " " });
+    }
+    out
+}
+
+/// `text` with a sentence inserted at the first sentence break past its middle.
+#[cfg(test)]
+pub(crate) fn insert_mid_sentence(text: &str) -> String {
+    let mid = text.len() / 2;
+    let at = mid + text[mid..].find(". ").expect("a sentence break") + 2;
+    format!(
+        "{}Inserted sentence about nothing much. {}",
+        &text[..at],
+        &text[at..]
+    )
+}
+
+/// Asserts every chunk's source span fits `size` tokens of the document's
+/// tokenization (unless it is one oversized unit without whitespace), and at
+/// most `size + 3` when re-tokenized on its own, since edge tokens straddle.
+#[cfg(test)]
+pub(crate) fn assert_token_budget(
+    encoding: crate::size::Encoding,
+    text: &str,
+    chunks: &[Chunk],
+    size: usize,
+) {
+    use crate::size::{Measure, SizeUnit};
+    let measure = SizeUnit::Tokens(encoding)
+        .token_measure(text)
+        .unwrap()
+        .expect("token unit");
+    let byte_at: Vec<usize> = text
+        .char_indices()
+        .map(|(i, _)| i)
+        .chain([text.len()])
+        .collect();
+    for c in chunks {
+        let (s, e) = (byte_at[c.start], byte_at[c.end]);
+        let alone = encoding.tokenizer().count(&text[s..e]);
+        assert!(
+            alone <= size + 3,
+            "chunk {} has {alone} tokens on its own",
+            c.index
+        );
+        let measured = measure.len(s, e);
+        let single_unit = !text[s..e].trim().contains(char::is_whitespace);
+        assert!(
+            measured <= size || single_unit,
+            "chunk {} measures {measured} tokens",
+            c.index
+        );
+    }
+}
+
+/// Chunks of `after` whose hash does not occur in `before`.
+#[cfg(test)]
+pub(crate) fn new_chunks(before: &[Chunk], after: &[Chunk]) -> usize {
+    let old: std::collections::HashSet<u64> = before.iter().map(|c| c.hash).collect();
+    after.iter().filter(|c| !old.contains(&c.hash)).count()
 }
 
 #[cfg(test)]
@@ -907,6 +1104,52 @@ mod tests {
                 assert_eq!(got, want, "divergence at size={size} overlap={overlap}");
             }
         }
+    }
+
+    #[test]
+    fn stable_merge_respects_budget_and_covers_every_unit() {
+        let text = varied_prose(400);
+        let map = OffsetMap::new(&text);
+        let units = word_spans(&text);
+        for &(size, overlap) in &[(40usize, 0usize), (200, 0), (200, 50), (1000, 300)] {
+            let merged = stable_merge(&map, &text, units.iter().copied(), size, overlap);
+            assert_eq!(merged.first().map(|m| m.0), Some(units[0].0));
+            assert_eq!(merged.last().map(|m| m.1), units.last().map(|u| u.1));
+            for w in merged.windows(2) {
+                assert!(w[0].0 < w[1].0 && w[0].1 < w[1].1, "chunks must ascend");
+                assert!(
+                    w[1].0 <= w[0].1 || text[w[0].1..w[1].0].trim().is_empty(),
+                    "gap skips a unit"
+                );
+            }
+            for &(s, e) in &merged {
+                assert!(map.char_len(s, e) <= size, "size={size} overlap={overlap}");
+            }
+        }
+    }
+
+    #[test]
+    fn stable_merge_only_changes_chunks_near_an_edit() {
+        let text = varied_prose(1500);
+        let edited = insert_mid_sentence(&text);
+        let to_chunks = |t: &str, stable: bool| {
+            let src: Arc<str> = Arc::from(t);
+            let map = OffsetMap::new(t);
+            let units = word_spans(t).into_iter();
+            let merged = if stable {
+                stable_merge(&map, t, units, 300, 60)
+            } else {
+                merge_span_iter(&map, units, 300, 60)
+            };
+            spans_to_chunks(&src, &map, &merged)
+        };
+        let greedy = new_chunks(&to_chunks(&text, false), &to_chunks(&edited, false));
+        let stable = new_chunks(&to_chunks(&text, true), &to_chunks(&edited, true));
+        assert!(
+            greedy > 100,
+            "the edit must disturb greedy packing to test anything: {greedy}"
+        );
+        assert!(stable <= 5, "stable boundaries changed {stable} chunks");
     }
 
     #[test]

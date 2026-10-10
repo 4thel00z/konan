@@ -89,6 +89,63 @@ from konan import TokenChunker
 chunker = TokenChunker(chunk_size=512, chunk_overlap=64, encoding="o200k_base")
 ```
 
+### Token budgets on structure-aware chunkers
+
+`RecursiveChunker`, `FixedSizeChunker`, `MarkdownChunker` and `SentenceChunker`
+count chars by default. Pass `encoding` and their size limits count tokens
+instead, while they keep splitting at paragraphs, sentences and headings:
+
+```python
+from konan import RecursiveChunker
+
+chunker = RecursiveChunker(chunk_size=512, chunk_overlap=64, encoding="cl100k_base")
+```
+
+OpenAI encodings only match OpenAI embedding models. For anything else, pass the
+model's own Hugging Face tokenizer, as a `tokenizers.Tokenizer` or a path to its
+`tokenizer.json`:
+
+```python
+from pathlib import Path
+from tokenizers import Tokenizer
+
+bge = Tokenizer.from_pretrained("BAAI/bge-m3")
+chunker = RecursiveChunker(chunk_size=512, chunk_overlap=64, encoding=bge)
+chunker = RecursiveChunker(chunk_size=512, encoding=Path("models/e5/tokenizer.json"))
+```
+
+The tokenizer's truncation and padding settings are ignored and no special
+tokens are counted, so leave room for `[CLS]`/`[SEP]` if your model adds them.
+Hugging Face tokenizers run at about 7–9 MB/s here, against ~110 MB/s for the
+built-in encodings.
+
+Token budgets are strict: carried overlap is dropped when it would push a chunk
+over `chunk_size`, and `MarkdownChunker` counts each chunk's heading breadcrumb
+against the budget. (Char budgets keep their original behaviour, where neither
+is counted.) Sizes come from one tokenization of the whole document, so a chunk
+re-tokenized on its own can still come out a few tokens larger (at most 3 in
+our tests), because tokens at its edges straddle the cut (`" word"` starts on
+the space before it, and SentencePiece tokenizers add a `▁` at the start). For
+`SentenceChunker`, `max_chars` counts tokens once `encoding` is set.
+
+### Stable boundaries for incremental indexing
+
+By default chunks are filled greedily, so inserting one sentence can shift every
+later chunk boundary and force you to re-embed the rest of the document. With
+`stable_boundaries=True` the cut points depend on chunk content instead, so an
+edit changes only the chunks around it:
+
+```python
+chunker = RecursiveChunker(chunk_size=300, chunk_overlap=0, stable_boundaries=True)
+# Synthetic 3000-sentence test document, one sentence inserted mid-way:
+# 1 chunk changes, vs 652 of 1303 with greedy filling.
+```
+
+Chunks stay within `chunk_size` (a single unit larger than it stays whole), but
+average about half of `chunk_size - chunk_overlap`. Available on
+`RecursiveChunker`, `FixedSizeChunker` and `MarkdownChunker`, combinable with
+`encoding`.
+
 ### Semantic chunking
 
 Point it at any OpenAI-compatible `/embeddings` endpoint (OpenAI, vLLM,
