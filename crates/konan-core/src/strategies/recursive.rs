@@ -59,8 +59,8 @@ impl RecursiveChunker {
         self
     }
 
-    /// Split `span` into unit spans each at most `chunk_size` units of
-    /// `measure` (or unsplittable), using the separator hierarchy starting at
+    /// Split `span` into unit spans each at most `size` units of `measure`
+    /// (or unsplittable), using the separator hierarchy starting at
     /// `sep_idx`. Each piece keeps its trailing separator so chunks reproduce
     /// the source.
     pub(crate) fn split_units(
@@ -68,16 +68,17 @@ impl RecursiveChunker {
         text: &str,
         measure: &impl Measure,
         span: (usize, usize),
+        size: usize,
         sep_idx: usize,
         out: &mut Vec<(usize, usize)>,
     ) {
-        if measure.len(span.0, span.1) <= self.chunk_size || sep_idx >= self.separators.len() {
+        if measure.len(span.0, span.1) <= size || sep_idx >= self.separators.len() {
             out.push(span);
             return;
         }
         let sep = &self.separators[sep_idx];
         if sep.is_empty() {
-            measure.split_even(text, span, self.chunk_size, out);
+            measure.split_even(text, span, size, out);
             return;
         }
         let slice = &text[span.0..span.1];
@@ -88,17 +89,24 @@ impl RecursiveChunker {
             found = true;
             let sep_end = span.0 + search_from + pos + sep.len();
             if sep_end > piece_start {
-                self.split_units(text, measure, (piece_start, sep_end), sep_idx + 1, out);
+                self.split_units(
+                    text,
+                    measure,
+                    (piece_start, sep_end),
+                    size,
+                    sep_idx + 1,
+                    out,
+                );
             }
             piece_start = sep_end;
             search_from = search_from + pos + sep.len();
         }
         if !found {
-            self.split_units(text, measure, span, sep_idx + 1, out);
+            self.split_units(text, measure, span, size, sep_idx + 1, out);
             return;
         }
         if piece_start < span.1 {
-            self.split_units(text, measure, (piece_start, span.1), sep_idx + 1, out);
+            self.split_units(text, measure, (piece_start, span.1), size, sep_idx + 1, out);
         }
     }
 }
@@ -121,7 +129,14 @@ impl Chunker for RecursiveChunker {
 impl RecursiveChunker {
     fn merged_spans(&self, text: &str, measure: &impl Measure) -> Vec<(usize, usize)> {
         let mut units = Vec::new();
-        self.split_units(text, measure, (0, text.len()), 0, &mut units);
+        self.split_units(
+            text,
+            measure,
+            (0, text.len()),
+            self.chunk_size,
+            0,
+            &mut units,
+        );
         if self.stable_boundaries {
             return stable_merge(
                 measure,
@@ -210,8 +225,8 @@ mod tests {
         for encoding in [Encoding::Cl100kBase, Encoding::O200kBase] {
             let configs = [
                 (16usize, 0usize, false),
-                (64, 0, false),
-                (256, 0, false),
+                (64, 16, false),
+                (256, 64, false),
                 (16, 0, true),
                 (64, 16, true),
                 (256, 32, true),
@@ -228,6 +243,29 @@ mod tests {
                 assert_token_budget(encoding, &text, &chunks, size);
             }
         }
+    }
+
+    #[test]
+    fn token_overlap_never_pushes_a_chunk_over_budget() {
+        let prose = varied_prose(800);
+        let words: Vec<&str> = prose.split_whitespace().collect();
+        let mut text = String::new();
+        let mut at = 0;
+        for n in (35..60).cycle().step_by(7).take(60) {
+            text.push_str(&words[at..at + n].join(" "));
+            text.push_str("\n\n");
+            at += n;
+        }
+        let chunks = RecursiveChunker::new(64, 16, None)
+            .unwrap()
+            .with_size_unit(SizeUnit::Tokens(Encoding::Cl100kBase))
+            .chunk(&text)
+            .unwrap();
+        assert!(
+            chunks.windows(2).any(|w| w[1].start < w[0].end),
+            "overlap must be exercised"
+        );
+        assert_token_budget(Encoding::Cl100kBase, &text, &chunks, 64);
     }
 
     #[test]

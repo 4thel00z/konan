@@ -71,6 +71,16 @@ pub enum SizeUnit {
 impl SizeUnit {
     /// Token counts for `text`, or `None` when the unit is chars.
     pub(crate) fn token_measure(&self, text: &str) -> Result<Option<TokenMeasure>, KonanError> {
+        let Some(ends) = self.token_ends(text)? else {
+            return Ok(None);
+        };
+        Ok(Some(TokenMeasure {
+            ends,
+            unit: self.clone(),
+        }))
+    }
+
+    fn token_ends(&self, text: &str) -> Result<Option<Vec<usize>>, KonanError> {
         let mut ends = match self {
             Self::Chars => return Ok(None),
             Self::Tokens(encoding) => encoding.token_ends(text)?,
@@ -79,7 +89,7 @@ impl SizeUnit {
         if !ends.is_sorted() {
             ends.sort_unstable();
         }
-        Ok(Some(TokenMeasure { ends }))
+        Ok(Some(ends))
     }
 }
 
@@ -98,7 +108,16 @@ impl fmt::Debug for SizeUnit {
 /// `len` must be additive: `len(a, b) + len(b, c) == len(a, c)`. The merge
 /// loops grow window sizes incrementally and depend on it.
 pub(crate) trait Measure {
+    /// Whether merges must drop carried overlap until the next unit fits, so
+    /// no chunk exceeds the budget. Char budgets keep their original merge,
+    /// which can overshoot by up to the overlap.
+    const STRICT_BUDGET: bool = false;
+
     fn len(&self, start: usize, end: usize) -> usize;
+
+    /// Budget consumed by `prefix`, text prepended to chunks that is not part
+    /// of the source.
+    fn reserve(&self, prefix: &str) -> Result<usize, KonanError>;
 
     /// Splits `span` into consecutive pieces of at most `size` units, each on
     /// char boundaries.
@@ -115,6 +134,11 @@ impl Measure for OffsetMap<'_> {
     #[inline]
     fn len(&self, start: usize, end: usize) -> usize {
         self.char_len(start, end)
+    }
+
+    /// Char budgets have never counted prefixes.
+    fn reserve(&self, _: &str) -> Result<usize, KonanError> {
+        Ok(0)
     }
 
     fn split_even(
@@ -149,6 +173,7 @@ impl Measure for OffsetMap<'_> {
 /// differ by a token at each edge, where document tokens straddle it.
 pub(crate) struct TokenMeasure {
     ends: Vec<usize>,
+    unit: SizeUnit,
 }
 
 impl TokenMeasure {
@@ -159,9 +184,15 @@ impl TokenMeasure {
 }
 
 impl Measure for TokenMeasure {
+    const STRICT_BUDGET: bool = true;
+
     #[inline]
     fn len(&self, start: usize, end: usize) -> usize {
         self.rank(end) - self.rank(start)
+    }
+
+    fn reserve(&self, prefix: &str) -> Result<usize, KonanError> {
+        Ok(self.unit.token_ends(prefix)?.map_or(0, |ends| ends.len()))
     }
 
     fn split_even(

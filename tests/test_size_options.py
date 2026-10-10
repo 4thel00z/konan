@@ -21,10 +21,10 @@ PROSE = "\n\n".join(
 SizedChunker = RecursiveChunker | FixedSizeChunker | MarkdownChunker | SentenceChunker
 
 TOKEN_CHUNKERS: list[SizedChunker] = [
-    RecursiveChunker(chunk_size=64, chunk_overlap=0, encoding="cl100k_base"),
+    RecursiveChunker(chunk_size=64, chunk_overlap=16, encoding="cl100k_base"),
     RecursiveChunker(chunk_size=64, chunk_overlap=16, encoding="o200k_base", stable_boundaries=True),
     FixedSizeChunker(chunk_size=64, chunk_overlap=16, respect_sentences=False, encoding="cl100k_base"),
-    MarkdownChunker(chunk_size=64, chunk_overlap=0, encoding="cl100k_base"),
+    MarkdownChunker(chunk_size=64, chunk_overlap=16, encoding="cl100k_base"),
     SentenceChunker(max_chars=64, overlap_sentences=1, encoding="cl100k_base"),
 ]
 
@@ -41,6 +41,18 @@ def test_token_budget_holds_within_edge_slack(chunker: SizedChunker) -> None:
     for c in chunks:
         assert PROSE[c.start : c.end] == c.text
         assert token_count(c.text, encoding) <= 64 + 3
+
+
+def test_markdown_breadcrumbs_count_toward_token_budget() -> None:
+    sections = PROSE.split("\n\n")
+    md = "\n\n".join(
+        f"# Handbook of rivers {i // 10}\n\n## Part {i}: the long winter harbor chapter\n\n{body}"
+        for i, body in enumerate(sections)
+    )
+    chunker = MarkdownChunker(chunk_size=64, chunk_overlap=16, encoding="cl100k_base")
+    chunks = chunker.chunk(md)
+    assert any(c.text.startswith("# Handbook") for c in chunks)
+    assert all(token_count(c.text, "cl100k_base") <= 64 + 3 for c in chunks)
 
 
 def test_default_is_chars() -> None:

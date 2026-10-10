@@ -116,31 +116,32 @@ impl MarkdownChunker {
         section: &[(usize, usize, bool)],
         breadcrumb: &str,
         chunks: &mut Vec<Chunk>,
-    ) {
+    ) -> Result<(), KonanError> {
         if section.is_empty() {
-            return;
+            return Ok(());
         }
         let text: &str = src;
+        let reserved = if breadcrumb.is_empty() {
+            0
+        } else {
+            measure.reserve(breadcrumb)? + measure.reserve("\n\n")?
+        };
+        let size = self.chunk_size.saturating_sub(reserved).max(1);
+        let overlap = self.chunk_overlap.min(size - 1);
         // Oversized non-code blocks get recursively split; code blocks stay atomic.
         let mut units: Vec<(usize, usize)> = Vec::new();
         for &(s, e, is_code) in section {
-            if !is_code && measure.len(s, e) > self.chunk_size {
+            if !is_code && measure.len(s, e) > size {
                 self.splitter
-                    .split_units(text, measure, (s, e), 0, &mut units);
+                    .split_units(text, measure, (s, e), size, 0, &mut units);
             } else {
                 units.push((s, e));
             }
         }
         let merged = if self.stable_boundaries {
-            stable_merge(
-                measure,
-                text,
-                units.into_iter(),
-                self.chunk_size,
-                self.chunk_overlap,
-            )
+            stable_merge(measure, text, units.into_iter(), size, overlap)
         } else {
-            merge_spans(measure, &units, self.chunk_size, self.chunk_overlap)
+            merge_spans(measure, &units, size, overlap)
         };
         for (s, e) in merged {
             let content = text[s..e].trim_end();
@@ -160,6 +161,7 @@ impl MarkdownChunker {
                 chunks.push(Chunk::new(chunk_text, start, end, index));
             }
         }
+        Ok(())
     }
 }
 
@@ -170,15 +172,20 @@ impl Chunker for MarkdownChunker {
             return Ok(Vec::new());
         }
         let map = OffsetMap::new(text);
-        Ok(match self.size_unit.token_measure(text)? {
+        match self.size_unit.token_measure(text)? {
             None => self.sections(src, &map, &map),
             Some(tokens) => self.sections(src, &map, &tokens),
-        })
+        }
     }
 }
 
 impl MarkdownChunker {
-    fn sections(&self, src: &Arc<str>, map: &OffsetMap, measure: &impl Measure) -> Vec<Chunk> {
+    fn sections(
+        &self,
+        src: &Arc<str>,
+        map: &OffsetMap,
+        measure: &impl Measure,
+    ) -> Result<Vec<Chunk>, KonanError> {
         let text: &str = src;
         // Merged span starts ascend across sections, so one cursor suffices.
         let mut cursor = map.cursor();
@@ -199,7 +206,7 @@ impl MarkdownChunker {
                     &section,
                     &breadcrumb,
                     &mut chunks,
-                );
+                )?;
                 section.clear();
                 let title = text[block.span.0..block.span.1]
                     .trim()
@@ -239,8 +246,8 @@ impl MarkdownChunker {
             &section,
             &breadcrumb,
             &mut chunks,
-        );
-        chunks
+        )?;
+        Ok(chunks)
     }
 }
 
@@ -248,7 +255,7 @@ impl MarkdownChunker {
 mod tests {
     use super::*;
     use crate::size::Encoding;
-    use crate::text::{assert_token_budget, new_chunks, varied_prose};
+    use crate::text::{new_chunks, varied_prose};
 
     const MD: &str = "# Guide\n\nIntro paragraph about the guide.\n\n## Install\n\nRun the installer.\n\n```bash\npip install konan\n```\n";
 
@@ -332,8 +339,14 @@ mod tests {
         let paragraphs: Vec<&str> = prose.split("\n\n").collect();
         let mut md = String::new();
         for (i, p) in paragraphs.iter().enumerate() {
+            if i % 15 == 0 {
+                md.push_str(&format!("# Handbook volume {i} on rivers and stones\n\n"));
+            }
             if i % 5 == 0 {
-                md.push_str(&format!("## Part {i}\n\n"));
+                md.push_str(&format!("## Part {i}: the long winter harbor chapter\n\n"));
+            }
+            if i % 5 == 2 {
+                md.push_str("### Copper lanterns under pale moonlight\n\n");
             }
             md.push_str(p);
             md.push_str("\n\n");
@@ -344,7 +357,7 @@ mod tests {
     #[test]
     fn token_size_unit_fits_budget() {
         let md = long_markdown();
-        for (overlap, stable) in [(0, false), (16, true)] {
+        for (overlap, stable) in [(0, false), (16, false), (16, true)] {
             let chunks = MarkdownChunker::new(64, overlap)
                 .unwrap()
                 .with_size_unit(SizeUnit::Tokens(Encoding::O200kBase))
@@ -354,8 +367,13 @@ mod tests {
             assert!(chunks.len() > 10);
             for c in &chunks {
                 assert!(c.text().ends_with(&source_slice(&md, c)));
+                let n = Encoding::O200kBase.tokenizer().count(c.text());
+                assert!(
+                    n <= 64 + 3,
+                    "chunk {} has {n} tokens with its breadcrumb",
+                    c.index
+                );
             }
-            assert_token_budget(Encoding::O200kBase, &md, &chunks, 64);
         }
     }
 

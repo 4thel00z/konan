@@ -119,11 +119,14 @@ tokens are counted, so leave room for `[CLS]`/`[SEP]` if your model adds them.
 Hugging Face tokenizers run at about 7–9 MB/s here, against ~110 MB/s for the
 built-in encodings.
 
-Sizes come from one tokenization of the whole document. A chunk re-tokenized on
-its own can come out a few tokens larger (at most 3 in our tests), because tokens
-at its edges straddle the cut (`" word"` starts on the space before it, and
-SentencePiece tokenizers add a `▁` at the start). For `SentenceChunker`,
-`max_chars` counts tokens once `encoding` is set.
+Token budgets are strict: carried overlap is dropped when it would push a chunk
+over `chunk_size`, and `MarkdownChunker` counts each chunk's heading breadcrumb
+against the budget. (Char budgets keep their original behaviour, where neither
+is counted.) Sizes come from one tokenization of the whole document, so a chunk
+re-tokenized on its own can still come out a few tokens larger (at most 3 in
+our tests), because tokens at its edges straddle the cut (`" word"` starts on
+the space before it, and SentencePiece tokenizers add a `▁` at the start). For
+`SentenceChunker`, `max_chars` counts tokens once `encoding` is set.
 
 ### Stable boundaries for incremental indexing
 

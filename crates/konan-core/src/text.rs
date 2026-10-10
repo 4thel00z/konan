@@ -478,8 +478,8 @@ pub(crate) fn merge_spans(
 
 /// [`merge_spans`] over a lazy unit iterator: identical semantics, no
 /// materialised unit vector.
-pub(crate) fn merge_span_iter(
-    measure: &impl Measure,
+pub(crate) fn merge_span_iter<M: Measure>(
+    measure: &M,
     spans: impl Iterator<Item = (usize, usize)>,
     chunk_size: usize,
     chunk_overlap: usize,
@@ -525,6 +525,17 @@ pub(crate) fn merge_span_iter(
             } else {
                 0
             };
+            while M::STRICT_BUDGET
+                && lo < hi
+                && window + measure.len(arena[hi - 1].1, span.1) > chunk_size
+            {
+                lo += 1;
+                window = if lo < hi {
+                    measure.len(arena[lo].0, arena[hi - 1].1)
+                } else {
+                    0
+                };
+            }
         }
         window = if lo < arena.len() {
             window + measure.len(arena[arena.len() - 1].1, span.1)
