@@ -50,18 +50,14 @@ fn swar_ge(x: u64, k: u64) -> u64 {
 /// filter loop it replaced, which only reached ~4 GB/s even auto-vectorised.
 fn count_chars(s: &str) -> usize {
     let bytes = s.as_bytes();
-    let mut chunks = bytes.chunks_exact(8);
+    let (blocks, rest) = bytes.as_chunks::<8>();
     let mut cont = 0u32;
-    for c in chunks.by_ref() {
-        let x = u64::from_ne_bytes(c.try_into().expect("chunks_exact(8) yields 8 bytes"));
+    for &block in blocks {
+        let x = u64::from_ne_bytes(block);
         cont += (x & !(x << 1) & SWAR_HI).count_ones();
     }
     // 0..7 trailing bytes: 0x80..=0xBF is the continuation range.
-    cont += chunks
-        .remainder()
-        .iter()
-        .filter(|&&b| (b as i8) < -0x40)
-        .count() as u32;
+    cont += rest.iter().filter(|&&b| (b as i8) < -0x40).count() as u32;
     bytes.len() - cont as usize
 }
 
